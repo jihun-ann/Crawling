@@ -20,9 +20,11 @@ class NaverSpider(Spider):
                 #self.searching_naver_blog(search_query)
 
     def searching_naver_map(self, query):
-        re_query = query.replace(" ","+")
+        re_query = urllib.parse.quote(query)
         print(re_query)
-        url = "https://map.naver.com/search/" + re_query
+        #url = "https://search.naver.com/search.naver?query=" + re_query                         #전체 통합 검색
+        url = "https://search.naver.com/search.naver?ssc=tab.blog.all&query=" + re_query       #블로그 검색
+        #url = "https://search.naver.com/search.naver?ssc=tab.cafe.all&query=" + re_query       #카페 검색
         print(url)
         request = urllib.request.Request(url)
         response = urllib.request.urlopen(request)
@@ -30,16 +32,16 @@ class NaverSpider(Spider):
         if(rescode==200):
             response_body = response.read()
             print(query)
-            print(response_body.decode('utf-8'))
+            #print(response_body.decode('utf-8'))
         else:
             print("Error Code:" + rescode)
 
     def searching_naver_blog(self,query):
         client_id = "lBn2OlsTkSAo6Dyr6h1c"
         client_secret = "rFc99bozMu"
-        encText = urllib.parse.quote(query)
+        re_query = urllib.parse.quote(query)
 
-        url = "https://openapi.naver.com/v1/search/blog?query=" + encText # JSON 결과
+        url = "https://openapi.naver.com/v1/search/blog?query=" + re_query # JSON 결과
         #url = "https://openapi.naver.com/v1/search/blog.xml?query=" + encText # XML 결과
         request = urllib.request.Request(url)
         request.add_header("X-Naver-Client-Id",client_id)
