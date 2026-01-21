@@ -12,7 +12,7 @@ class SrcItem(scrapy.Item):
     business_days = scrapy.Field()          #영업요일
     break_time = scrapy.Field()             #브레이크타임
     business_status = scrapy.Field()        #영업여부
-    image_urls = scrapy.Field()                 #대표이미지URL [url1,url2,url3]
+    image_urls = scrapy.Field()             #대표이미지URL [url1,url2,url3]
 
     review_count_platform = scrapy.Field()  #검색 플랫폼 전용 리뷰수
     review_count_blog = scrapy.Field()      #블로그 전용 리뷰수
