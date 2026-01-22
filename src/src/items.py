@@ -37,3 +37,9 @@ class SrcItem(scrapy.Item):
     longitude = scrapy.Field()              #경도
 
     crawled_at = scrapy.Field()             #크롤링 일자
+
+class BlogContentItem(scrapy.Item):
+    blog_url = scrapy.Field()               #블로그URL
+    title = scrapy.Field()                  #블로그 글 제목
+    context = scrapy.Field()                #블로그 글 내용
+    crawled_at = scrapy.Field()             #블로그 크롤링 일자
