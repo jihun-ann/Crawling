@@ -7,8 +7,7 @@ from importlib import resources
 from collections import deque
 from bs4 import BeautifulSoup
 
-from src.src.items import BlogContentItem
-
+#from source.src.items import BlogContentItem
 
 class NaverSpider(Spider):
     name = "naver_crawling"
@@ -33,7 +32,7 @@ class NaverSpider(Spider):
         url = "https://search.naver.com/search.naver?ssc=tab.blog.all&query=" + re_query       #블로그 검색
         #url = "https://search.naver.com/search.naver?ssc=tab.cafe.all&query=" + re_query      #카페 검색
 
-        yield scrapy.Request(url, self.parsing_init_blog_html)
+        yield scrapy.Request(url, self.parse_init_blog_html)
         # request = urllib.request.Request(url)
         # response = urllib.request.urlopen(request)
         # rescode = response.getcode()
@@ -43,8 +42,7 @@ class NaverSpider(Spider):
         # else:
         #     print("Error Code:" + rescode)
 
-    def parsing_init_blog_html(self, response):
-        print(">>>>")
+    def parse_init_blog_html(self, response):
         soup = BeautifulSoup(response.text,"html.parser")
         for span in soup.select("span.sds-comps-text-type-headline1"):
             text = span.get_text()
@@ -53,35 +51,45 @@ class NaverSpider(Spider):
             else :
                 a = span.find_parent("a")
                 href = a.get("href")
-                yield scrapy.Request(href, self.parsing_main_blog_html)
+                yield scrapy.Request(href, self.parse_main_blog_html)
 
 
-    def parsing_main_blog_html(self, response):
+    def parse_main_blog_html(self, response):
         soup = BeautifulSoup(response.text,"html.parser")
         iframe = soup.select_one("iframe#mainFrame")
         if iframe :
             iframe_src = iframe.get("src")
             url = "https://blog.naver.com/"+iframe_src
-            yield scrapy.Request(url, self.parsing_main_container_export)
+            yield scrapy.Request(url, self.parse_main_container_export)
 
         # for iframe in soup.select("iframe#mainFrame"):
         #     iframe_src = iframe.get("src")
         #     url = "https://blog.naver.com/"+iframe_src
         #     yield scrapy.Request(url, self.parsing_main_container_export)
 
-    def parsing_main_container_export(self, response):
+    def parse_main_container_export(self, response):
         soup = BeautifulSoup(response.text,"html.parser")
+        title = str
+        content_text = str
         if soup.select("div.se-main-container") is not None:
+            title = soup.select_one("div.se-title-text")
             content = soup.select_one("div.se-main-container")
             content_text = content.get_text().replace("\n"," ").replace("  "," ")
 
-            print(content_text)
         elif soup.select("#postViewArea") is not None :
             content = soup.select_one("#postViewArea")
             content_text = content.get_text().replace("\n"," ").replace("  "," ")
-            print(content_text)
 
-    def save_main_content(self, content):
+        # parsing_blog_item = self.parsing_blog_content_items(title, content)
+        print(title)
+
+
+    def parsing_blog_item(self, title, content):
+        # item = BlogContentItem()
+        # item['BlogContentItem']
+        # item['title'] = title
+        # item['context'] = content
+        # item['crawled_at']
         pass
 
     def searching_naver_api_blog(self,query):
