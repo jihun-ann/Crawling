@@ -7,10 +7,11 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
-BOT_NAME = "src"
+BOT_NAME = "source"
+BASE_DIR = "C:\WorkSpace\Crawling"
 
-SPIDER_MODULES = ["src.spiders"]
-NEWSPIDER_MODULE = "src.spiders"
+SPIDER_MODULES = ["source.src.spiders"]
+NEWSPIDER_MODULE = "source.src.spiders"
 
 ADDONS = {}
 
@@ -59,9 +60,9 @@ DOWNLOAD_DELAY = 1
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    "src.pipelines.SrcPipeline": 300,
-#}
+ITEM_PIPELINES = {
+   "source.src.pipelines.SrcPipeline": 300,
+}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
