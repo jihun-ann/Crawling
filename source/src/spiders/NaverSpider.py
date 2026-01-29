@@ -1,13 +1,18 @@
 import urllib
 import json
 
+import datetime
+from pathlib import Path
+
 import scrapy
 from scrapy import Spider
 from importlib import resources
 from collections import deque
 from bs4 import BeautifulSoup
+from scrapy.utils.project import get_project_settings
 
-#from source.src.items import BlogContentItem
+from source.src.items import BlogContentItem
+
 
 class NaverSpider(Spider):
     name = "naver_crawling"
@@ -17,8 +22,8 @@ class NaverSpider(Spider):
         location_q = self.location_name(province)
 
         keyword_q = deque()
-        keyword_q.append("맛집")
-        #keyword_q = self.keyword_list()
+        keyword_q.append("맛집") #단건 테스트
+        #keyword_q = self.keyword_list() #리스트 조회
 
         for location in location_q:
             for keyword in keyword_q:
@@ -51,21 +56,36 @@ class NaverSpider(Spider):
             else :
                 a = span.find_parent("a")
                 href = a.get("href")
-                yield scrapy.Request(href, self.parse_main_blog_html)
+                blog_url = href.replace("https://","").replace("http://","").replace("/","_")
 
+                if self.has_blog_content(blog_url) :
+                    yield scrapy.Request(href, self.parse_main_blog_html,meta={"blog_url":blog_url})
+                else :
+                    print("Already crawling")
+                    continue
+
+    def has_blog_content(self, url):
+        result = False
+        settings = get_project_settings()
+        path = Path(settings.get("BASE_DIR"))/"source"/"src"/"blog_content"/f"{url}.json"
+
+        if path.exists() :
+            result = False
+        else :
+            result = True
+
+        return result
 
     def parse_main_blog_html(self, response):
+        filename = response.meta["blog_url"]
+        blog_url = response.url
         soup = BeautifulSoup(response.text,"html.parser")
         iframe = soup.select_one("iframe#mainFrame")
         if iframe :
             iframe_src = iframe.get("src")
             url = "https://blog.naver.com/"+iframe_src
-            yield scrapy.Request(url, self.parse_main_container_export)
+            yield scrapy.Request(url, self.parse_main_container_export, meta={"blog_url":blog_url, "filename":filename})
 
-        # for iframe in soup.select("iframe#mainFrame"):
-        #     iframe_src = iframe.get("src")
-        #     url = "https://blog.naver.com/"+iframe_src
-        #     yield scrapy.Request(url, self.parsing_main_container_export)
 
     def parse_main_container_export(self, response):
         soup = BeautifulSoup(response.text,"html.parser")
@@ -80,17 +100,24 @@ class NaverSpider(Spider):
             content = soup.select_one("#postViewArea")
             content_text = content.get_text().replace("\n"," ").replace("  "," ")
 
-        # parsing_blog_item = self.parsing_blog_content_items(title, content)
-        print(title)
+        parsing_blog_item = self.parsing_blog_content_items(title.get_text().replace("\n"," "),
+                                                            response.meta["filename"],
+                                                            response.meta["blog_url"],
+                                                            response.url,
+                                                            content_text)
+        yield parsing_blog_item
+        print(parsing_blog_item)
 
 
-    def parsing_blog_item(self, title, content):
-        # item = BlogContentItem()
-        # item['BlogContentItem']
-        # item['title'] = title
-        # item['context'] = content
-        # item['crawled_at']
-        pass
+    def parsing_blog_content_items(self, title, filename, blog_url, content_url, content):
+        item = BlogContentItem()
+        item['filename'] = filename
+        item['blog_url'] = blog_url
+        item['content_url'] = content_url
+        item['title'] = title
+        item['context'] = content
+        item['crawled_at'] = datetime.date.today().isoformat()
+        return item
 
     def searching_naver_api_blog(self,query):
         client_id = "lBn2OlsTkSAo6Dyr6h1c"
@@ -113,7 +140,7 @@ class NaverSpider(Spider):
 
     def location_name(self, prov_value):
         q = deque()
-        resource_path = resources.files("src.properties")
+        resource_path = resources.files("source.src.properties")
         # 지역명 JSON 추출
         with resource_path.joinpath("location_kr.json").open(encoding="utf-8") as f :
             locations = json.load(f)
@@ -141,7 +168,7 @@ class NaverSpider(Spider):
 
     def keyword_list(self):
         q = deque()
-        resource_path = resources.files("src.properties")
+        resource_path = resources.files("source.src.properties")
 
         # 키워드 JSON 추출
         with resource_path.joinpath("keyword.json").open(encoding="utf-8") as f :

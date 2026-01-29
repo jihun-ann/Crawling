@@ -3,6 +3,9 @@ import scrapy
 
 
 class SrcItem(scrapy.Item):
+    pass
+
+class PlaceItem(scrapy.Item):
     # 장소 정보
     place_id = scrapy.Field()
     name = scrapy.Field()                   #상호명
@@ -39,7 +42,9 @@ class SrcItem(scrapy.Item):
     crawled_at = scrapy.Field()             #크롤링 일자
 
 class BlogContentItem(scrapy.Item):
+    filename = scrapy.Field()               #파일명
     blog_url = scrapy.Field()               #블로그URL
+    content_url = scrapy.Field()            #IFrameURL
     title = scrapy.Field()                  #블로그 글 제목
     context = scrapy.Field()                #블로그 글 내용
     crawled_at = scrapy.Field()             #블로그 크롤링 일자
