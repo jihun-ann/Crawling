@@ -1,3 +1,4 @@
+import re
 import urllib
 import json
 
@@ -10,12 +11,14 @@ from importlib import resources
 from collections import deque
 from bs4 import BeautifulSoup
 from scrapy.utils.project import get_project_settings
+from urllib.parse import urlparse, parse_qs
 
-from source.src.items import BlogContentItem
+from source.src.items import ContentItem
 
 
 class NaverSpider(Spider):
     name = "naver_crawling"
+    platform = "naver"
 
     def start_requests(self):
         province = self.prov
@@ -28,46 +31,67 @@ class NaverSpider(Spider):
         for location in location_q:
             for keyword in keyword_q:
                 search_query = " ".join([location,keyword])
-                yield from self.searching_naver_blog(search_query)
+                yield from self.searching_naver(search_query, 1)
                 #self.searching_naver_api_blog(search_query)
 
-    def searching_naver_blog(self, query):
+    def searching_naver(self, query, start):
         re_query = urllib.parse.quote(query)
-        #url = "https://search.naver.com/search.naver?query=" + re_query                       #전체 통합 검색
-        url = "https://search.naver.com/search.naver?ssc=tab.blog.all&query=" + re_query       #블로그 검색
-        #url = "https://search.naver.com/search.naver?ssc=tab.cafe.all&query=" + re_query      #카페 검색
+        options = ["blog"]
 
-        yield scrapy.Request(url, self.parse_init_blog_html)
-        # request = urllib.request.Request(url)
-        # response = urllib.request.urlopen(request)
-        # rescode = response.getcode()
-        # if(rescode==200):
-        #     response_body = response.read()
-        #     self.parsing_init_blog_html(response_body.decode('utf-8'))
-        # else:
-        #     print("Error Code:" + rescode)
+        for opt in options:
+            url = f"https://search.naver.com/search.naver?ssc=tab.{opt}.all&query={re_query}&start={start}"
+            #url = "https://search.naver.com/search.naver?query=" + re_query                       #전체 통합 검색
+            #url = "https://search.naver.com/search.naver?ssc=tab.blog.all&query=" + re_query      #블로그 검색
+            #url = "https://search.naver.com/search.naver?ssc=tab.cafe.all&query=" + re_query      #카페 검색
+            yield scrapy.Request(url, self.parse_init_html, meta={"query":re_query,"start":start})
 
-    def parse_init_blog_html(self, response):
+
+    def parse_init_html(self, response):
         soup = BeautifulSoup(response.text,"html.parser")
-        for span in soup.select("span.sds-comps-text-type-headline1"):
-            text = span.get_text()
-            if(text in ("경매", "법원경매", "부동산")) :
-                continue
-            else :
-                a = span.find_parent("a")
-                href = a.get("href")
-                blog_url = href.replace("https://","").replace("http://","").replace("/","_")
+        cont = 0
 
-                if self.has_blog_content(blog_url) :
-                    yield scrapy.Request(href, self.parse_main_blog_html,meta={"blog_url":blog_url})
-                else :
-                    print("Already crawling")
+        for a in soup.select("a"):
+            init_url = None
+            span_text = None
+
+            #블로그 Link
+            span = a.select_one("span.sds-comps-text-type-headline1")
+            if  span:
+                span_text = span.get_text()
+                cont += 1
+
+
+            #카페 Link
+            elif "title_link" in a.get("class", []):
+                span_text = a.get_text()
+                cont += 1
+
+            if not span_text:
+                continue
+
+            block_keywords = ("경매", "법원경매", "부동산", "광고", "협찬", "임장", "의원", "병원", "학비", "거주", "원룸", "투룸")
+            if any(keyword in span_text for keyword in block_keywords):
+                continue
+            else:
+                href = a.get("href")
+                init_url = href.replace("https://","").replace("http://","").replace("/","_")
+
+                if not self.has_content(init_url):
                     continue
 
-    def has_blog_content(self, url):
+                yield scrapy.Request(href, self.parse_main_html,meta={"init_url":init_url})
+
+        if cont == 0:
+            return
+
+        yield from self.searching_naver(urllib.parse.unquote(response.meta["query"]),
+                                        response.meta["start"]+30)
+
+
+    def has_content(self, url):
         result = False
         settings = get_project_settings()
-        path = Path(settings.get("BASE_DIR"))/"source"/"src"/"blog_content"/f"{url}.json"
+        path = Path(settings.get("BASE_DIR"))/"source"/"src"/"content"/f"{self.platform}"/f"{url}.json"
 
         if path.exists() :
             result = False
@@ -76,44 +100,66 @@ class NaverSpider(Spider):
 
         return result
 
-    def parse_main_blog_html(self, response):
-        filename = response.meta["blog_url"]
-        blog_url = response.url
+
+    def parse_main_html(self, response):
+        filename = response.meta["init_url"]
+        init_url = response.url
         soup = BeautifulSoup(response.text,"html.parser")
-        iframe = soup.select_one("iframe#mainFrame")
-        if iframe :
-            iframe_src = iframe.get("src")
-            url = "https://blog.naver.com/"+iframe_src
-            yield scrapy.Request(url, self.parse_main_container_export, meta={"blog_url":blog_url, "filename":filename})
+
+        iframe = None
+        url = None
+
+        if "blog.naver.com" in response.url :
+            iframe = soup.select_one("iframe#mainFrame")
+            url = f"https://blog.naver.com{iframe.get("src")}"
+        elif "cafe.naver.com" in response.url :
+            iframe = soup.select_one("iframe#cafe_main")
+
+            main_area = soup.select_one("div#main-area")
+            scripts = main_area.find_all("script")
+            script_text = "".join(s.string for s in scripts if s.string)
+
+            m = re.search(
+                r'cafe_main"\)\.src\s*=\s*"([^"]+)"',
+                script_text
+            )
+
+            url = f"https:{m.group(1)}"
+        else :
+            return
+
+        yield scrapy.Request(url, self.parse_main_container_export, meta={"init_url":init_url, "filename":filename})
 
 
     def parse_main_container_export(self, response):
         soup = BeautifulSoup(response.text,"html.parser")
         title = str
         content_text = str
-        if soup.select("div.se-main-container") is not None:
-            title = soup.select_one("div.se-title-text")
-            content = soup.select_one("div.se-main-container")
+        content = (soup.select_one("div.se-main-container") or soup.select_one("div.ContentRenderer")) #se-main-container는 블로그용, div.ContentRenderer 카페용
+
+        if content is not None:
+            title = (soup.select_one("div.se-title-text") or soup.select_one("h3.title_text"))    #se-title-text는 블로그용, title_text 카페용
             content_text = content.get_text().replace("\n"," ").replace("  "," ")
 
         elif soup.select("#postViewArea") is not None :
             content = soup.select_one("#postViewArea")
             content_text = content.get_text().replace("\n"," ").replace("  "," ")
 
-        parsing_blog_item = self.parsing_blog_content_items(title.get_text().replace("\n"," "),
+        parsing_item = self.parsing_content_items(title.get_text().replace("\n"," "),
                                                             response.meta["filename"],
-                                                            response.meta["blog_url"],
+                                                            response.meta["init_url"],
                                                             response.url,
                                                             content_text)
-        yield parsing_blog_item
-        print(parsing_blog_item)
+        yield parsing_item
+        # print(parsing_item)
 
 
-    def parsing_blog_content_items(self, title, filename, blog_url, content_url, content):
-        item = BlogContentItem()
+    def parsing_content_items(self, title, filename, init_url, content_url, content):
+        item = ContentItem()
         item['filename'] = filename
-        item['blog_url'] = blog_url
+        item['init_url'] = init_url
         item['content_url'] = content_url
+        item['platform'] = self.platform
         item['title'] = title
         item['context'] = content
         item['crawled_at'] = datetime.date.today().isoformat()
@@ -133,8 +179,6 @@ class NaverSpider(Spider):
         rescode = response.getcode()
         if(rescode==200):
             response_body = response.read()
-            print(query)
-            print(response_body.decode('utf-8'))
         else:
             print("Error Code:" + rescode)
 
