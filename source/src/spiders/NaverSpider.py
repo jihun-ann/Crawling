@@ -1,10 +1,11 @@
 import re
 import urllib
 import json
-
+import logging
 import datetime
 from pathlib import Path
 
+import requests
 import scrapy
 from scrapy import Spider
 from importlib import resources
@@ -15,6 +16,8 @@ from urllib.parse import urlparse, parse_qs
 
 from source.src.items import ContentItem
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 class NaverSpider(Spider):
     name = "naver_crawling"
@@ -22,7 +25,8 @@ class NaverSpider(Spider):
 
     def start_requests(self):
         province = self.prov
-        location_q = self.location_name(province)
+        location_q = self.location_list(province)
+        # location_q = self.location_name(province)
 
         keyword_q = deque()
         keyword_q.append("맛집") #단건 테스트
@@ -32,7 +36,6 @@ class NaverSpider(Spider):
             for keyword in keyword_q:
                 search_query = " ".join([location,keyword])
                 yield from self.searching_naver(search_query, 1)
-                #self.searching_naver_api_blog(search_query)
 
     def searching_naver(self, query, start):
         re_query = urllib.parse.quote(query)
@@ -95,8 +98,10 @@ class NaverSpider(Spider):
 
         if path.exists() :
             result = False
+            logger.info(f"Cralwing : {url}")
         else :
             result = True
+            logger.info(f"Already Cralwed : {url}")
 
         return result
 
@@ -151,7 +156,6 @@ class NaverSpider(Spider):
                                                             response.url,
                                                             content_text)
         yield parsing_item
-        # print(parsing_item)
 
 
     def parsing_content_items(self, title, filename, init_url, content_url, content):
@@ -165,22 +169,58 @@ class NaverSpider(Spider):
         item['crawled_at'] = datetime.date.today().isoformat()
         return item
 
-    def searching_naver_api_blog(self,query):
-        client_id = "lBn2OlsTkSAo6Dyr6h1c"
-        client_secret = "rFc99bozMu"
-        re_query = urllib.parse.quote(query)
 
-        url = "https://openapi.naver.com/v1/search/blog?query=" + re_query # JSON 결과
-        #url = "https://openapi.naver.com/v1/search/blog.xml?query=" + encText # XML 결과
-        request = urllib.request.Request(url)
-        request.add_header("X-Naver-Client-Id",client_id)
-        request.add_header("X-Naver-Client-Secret",client_secret)
-        response = urllib.request.urlopen(request)
-        rescode = response.getcode()
-        if(rescode==200):
-            response_body = response.read()
-        else:
-            print("Error Code:" + rescode)
+    def location_list(self, prov):
+        settings = get_project_settings()
+        client_param = {"consumer_key":f"{settings.get("CLIENT_ID")}","consumer_secret":f"{settings.get("CLIENT_KEY")}"}
+        token_url = "https://sgisapi.mods.go.kr/OpenAPI3/auth/authentication.json"
+        token_response = requests.get(token_url,params=client_param)
+
+        q = deque()
+
+        if token_response.status_code == 200 :
+            access_token_json = token_response.json()
+            access_token = access_token_json["result"]["accessToken"]
+
+            stage_url = "https://sgisapi.mods.go.kr/OpenAPI3/addr/stage.json"
+
+            resource_path = resources.files("source.src.properties")
+            with resource_path.joinpath("location_kr.json").open(encoding="utf-8") as f :
+                locations = json.load(f)
+
+            cd = None
+            for loc in locations:
+                if loc["addr_name"] == prov:
+                    cd = loc["cd"]
+
+            if not cd :
+                logger.error(f"Error prov [{prov}] is Not Found")
+                return
+
+            stage_param = {"accessToken":access_token,"cd":cd}
+            stage_gu_response = requests.get(stage_url,params=stage_param)
+
+            if stage_gu_response.status_code == 200:
+                stage_list = stage_gu_response.json()["result"]
+                for stage_gu in stage_list:
+                    stage_param["cd"] = stage_gu["cd"]
+
+                    full_stage_response = requests.get(stage_url,params=stage_param)
+                    if full_stage_response.status_code == 200:
+                        full_stage_list = full_stage_response.json()["result"]
+                        for stage in full_stage_list:
+                            q.append(stage["full_addr"])
+
+                    else:
+                        logger.error(f"Error Full Stage Retrived: {token_response.text}")
+                        print()
+            else :
+                logger.error()
+                print(f"Error Stage Retrived: {token_response.text}")
+            return q
+        else :
+            logger.error()
+            print(f"Error Code: {token_response.text}")
 
     def location_name(self, prov_value):
         q = deque()

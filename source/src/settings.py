@@ -16,7 +16,8 @@ NEWSPIDER_MODULE = "source.src.spiders"
 ADDONS = {}
 
 LOG_LEVEL = "INFO"
-
+CLIENT_ID = "8d41a625e0d647188adb"
+CLIENT_KEY = "6aadddfbcc90465589f4"
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = "src (+http://www.yourdomain.com)"
 
