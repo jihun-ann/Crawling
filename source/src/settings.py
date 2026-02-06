@@ -15,6 +15,12 @@ NEWSPIDER_MODULE = "source.src.spiders"
 
 ADDONS = {}
 
+DB_URL = "localhost"
+DB_PORT = "5432"
+DB_USER = "postgres"
+DB_PASSWORD = "passw0rd"
+DB_SCHEMA = "postgres"
+
 LOG_LEVEL = "INFO"
 CLIENT_ID = "8d41a625e0d647188adb"
 CLIENT_KEY = "6aadddfbcc90465589f4"

@@ -213,14 +213,11 @@ class NaverSpider(Spider):
 
                     else:
                         logger.error(f"Error Full Stage Retrived: {token_response.text}")
-                        print()
             else :
-                logger.error()
-                print(f"Error Stage Retrived: {token_response.text}")
+                logger.error(f"Error Stage Retrived: {token_response.text}")
             return q
         else :
-            logger.error()
-            print(f"Error Code: {token_response.text}")
+            logger.error(f"Error Code: {token_response.text}")
 
     def location_name(self, prov_value):
         q = deque()
