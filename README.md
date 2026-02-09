@@ -1,9 +1,9 @@
-# 🐍Python Toy Project
+# 🐍Crawling | Python Toy Project
 ## 📌Purpose
 This project crawls Naver blog posts, calculates an interest score based on the number of blog posts, and stores the processed data in a PostgreSQL database.
 
 ## 🎄To-be Architecture
-
+![img.png](img.png)
 
 ## 🛠 Tech Stack
 - ***Python***

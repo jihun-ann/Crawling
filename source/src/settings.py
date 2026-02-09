@@ -27,16 +27,25 @@ CLIENT_KEY = "6aadddfbcc90465589f4"
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = "src (+http://www.yourdomain.com)"
 
+
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False
-
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+#Scrapy Spider Setting
 # Concurrency and throttling settings
-#CONCURRENT_REQUESTS = 16
-CONCURRENT_REQUESTS_PER_DOMAIN = 1
-DOWNLOAD_DELAY = 1
+CONCURRENT_REQUESTS = 32
+CONCURRENT_REQUESTS_PER_DOMAIN = 16
+DOWNLOAD_DELAY = 0.5
+#크롤링 대상 사이트에 피해를 주지 않기 위하여 요청 지연 시간 랜덤으로 적용되도록 하는 옵션
+RANDOMIZE_DOWNLOAD_DELAY = True
 
 # Disable cookies (enabled by default)
-#COOKIES_ENABLED = False
+COOKIES_ENABLED = False
+
+
+DEPTH_PRIORITY = 1
+SCHEDULER_DISK_QUEUE = 'scrapy.squeues.PickleFifoDiskQueue'
+SCHEDULER_MEMORY_QUEUE = 'scrapy.squeues.FifoMemoryQueue'
 
 # Disable Telnet Console (enabled by default)
 #TELNETCONSOLE_ENABLED = False
