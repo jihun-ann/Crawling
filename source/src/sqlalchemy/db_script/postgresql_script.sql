@@ -20,7 +20,7 @@ create table place(
     keywords TEXT,
     visit_purpose TEXT,
     blog_review_urls TEXT,
-    blog_review_count INTEGER,
+    blog_review_count INTEGER DEFAULT 0,
 
     location_zipcode INTEGER,
     location_province VARCHAR,
@@ -34,3 +34,11 @@ create table place(
 
     crawled_at VARCHAR
 );
+
+CREATE SEQUENCE seq_place START 1;
+
+
+-- Test PLACE DATA Create
+INSERT INTO public.place
+(place_id, "name", "type", phone_number, business_hours, business_days, break_time, business_status, image_urls, review_count_platform, review_count_blog, visit_rate, rating, price_level, keywords, visit_purpose, blog_review_urls, blog_review_count, location_zipcode, location_province, location_city, location_country, location_town, location_detail, latitude, longitude, crawled_at)
+VALUES(1, 'TEST', '식당', '01012341234', '09:00~22:00', '["월","화","수","목","금"]', '14:00~15:00', '1', 'naver.com', 0, 0, 0, 0, 0, '["데이트"]', '["데이트"]', 'naver.com', 0, 0, '도', '시', '구', '동', '상세', '위도', '경도', '2026-02-06');

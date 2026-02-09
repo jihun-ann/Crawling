@@ -36,6 +36,7 @@ class NaverSpider(Spider):
             for keyword in keyword_q:
                 search_query = " ".join([location,keyword])
                 yield from self.searching_naver(search_query, 1)
+        # yield from self.searching_naver("서울특별시 강서구 방화동 맛집", 1)
 
     def searching_naver(self, query, start):
         re_query = urllib.parse.quote(query)
@@ -72,31 +73,29 @@ class NaverSpider(Spider):
             if not span_text:
                 continue
 
-            block_keywords = ("경매", "법원경매", "부동산", "광고", "협찬", "임장", "의원", "병원", "학비", "거주", "원룸", "투룸")
+            block_keywords = ("경매", "법원경매", "부동산", "광고", "협찬", "임장", "의원", "병원", "학비", "거주", "원룸", "투룸", "직거래", "시술", "공고", "매매")
             if any(keyword in span_text for keyword in block_keywords):
                 continue
             else:
                 href = a.get("href")
-                init_url = href.replace("https://","").replace("http://","").replace("/","_")
+                file_name = href.replace("https://","").replace("http://","").replace("/","_")
 
-                if not self.has_content(init_url):
+                if self.has_content(file_name):
                     continue
-
-                yield scrapy.Request(href, self.parse_main_html,meta={"init_url":init_url})
+                yield scrapy.Request(href, self.parse_main_html,meta={"file_name":file_name}, dont_filter=True)
 
         if cont == 0:
             return
 
-        yield from self.searching_naver(urllib.parse.unquote(response.meta["query"]),
-                                        response.meta["start"]+30)
+        # yield from self.searching_naver(urllib.parse.unquote(response.meta["query"]),
+        #                                 response.meta["start"]+30)
 
 
     def has_content(self, url):
         result = False
         settings = get_project_settings()
-        path = Path(settings.get("BASE_DIR"))/"source"/"src"/"content"/f"{self.platform}"/f"{url}.json"
-
-        if path.exists() :
+        path = Path(settings.get("BASE_DIR"))/"source"/"src"/"blog_content"/f"{self.platform}"/f"{url}.json"
+        if not path.exists() :
             result = False
             logger.info(f"Cralwing : {url}")
         else :
@@ -107,10 +106,10 @@ class NaverSpider(Spider):
 
 
     def parse_main_html(self, response):
-        filename = response.meta["init_url"]
+        filename = response.meta["file_name"]
         init_url = response.url
         soup = BeautifulSoup(response.text,"html.parser")
-
+        print(response.url)
         iframe = None
         url = None
 
