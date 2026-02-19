@@ -34,6 +34,6 @@ def upsert_place(db: Session, new_place: Place):
         result = True
     except SQLAlchemyError  as e:
         db.rollback()
-        logger.error(f"place_crud|upsert_place|Create Transaction Error|{e}")
+        logger.exception(f"place_crud|upsert_place|Create Transaction Error|{e}")
 
     return result
