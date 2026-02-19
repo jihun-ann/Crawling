@@ -32,13 +32,13 @@ class NaverSpider(Spider):
         keyword_q.append("맛집") #단건 테스트
         #keyword_q = self.keyword_list() #리스트 조회
 
-        for location in location_q:
-            for keyword in keyword_q:
-                search_query = " ".join([location,keyword])
-                yield from self.searching_naver(search_query, 1)
-        # yield from self.searching_naver("서울특별시 강서구 방화동 맛집", 1)
+        # for location in location_q:
+        #     for keyword in keyword_q:
+        #         search_query = " ".join([location,keyword])
+        #         yield from self.searching_naver(search_query, 1, keyword)
+        yield from self.searching_naver("서울특별시 강서구 방화동 맛집", 1, '맛집')
 
-    def searching_naver(self, query, start):
+    def searching_naver(self, query, start, keyword):
         re_query = urllib.parse.quote(query)
         options = ["blog"]
 
@@ -47,7 +47,7 @@ class NaverSpider(Spider):
             #url = "https://search.naver.com/search.naver?query=" + re_query                       #전체 통합 검색
             #url = "https://search.naver.com/search.naver?ssc=tab.blog.all&query=" + re_query      #블로그 검색
             #url = "https://search.naver.com/search.naver?ssc=tab.cafe.all&query=" + re_query      #카페 검색
-            yield scrapy.Request(url, self.parse_init_html, meta={"query":re_query,"start":start})
+            yield scrapy.Request(url, self.parse_init_html, meta={"query":re_query,"start":start, "keyword":keyword})
 
 
     def parse_init_html(self, response):
@@ -82,7 +82,7 @@ class NaverSpider(Spider):
 
                 if self.has_content(file_name):
                     continue
-                yield scrapy.Request(href, self.parse_main_html,meta={"file_name":file_name}, dont_filter=True)
+                yield scrapy.Request(href, self.parse_main_html,meta={"file_name":file_name,"keyword":response.meta["keyword"]}, dont_filter=True)
 
         if cont == 0:
             return
@@ -132,7 +132,7 @@ class NaverSpider(Spider):
         else :
             return
 
-        yield scrapy.Request(url, self.parse_main_container_export, meta={"init_url":init_url, "filename":filename})
+        yield scrapy.Request(url, self.parse_main_container_export, meta={"init_url":init_url, "filename":filename,"keyword":response.meta["keyword"]})
 
 
     def parse_main_container_export(self, response):
@@ -143,21 +143,22 @@ class NaverSpider(Spider):
 
         if content is not None:
             title = (soup.select_one("div.se-title-text") or soup.select_one("h3.title_text"))    #se-title-text는 블로그용, title_text 카페용
-            content_text = content.get_text().replace("\n"," ").replace("  "," ")
+            content_text = content.get_text().replace("  "," ")
 
         elif soup.select("#postViewArea") is not None :
             content = soup.select_one("#postViewArea")
-            content_text = content.get_text().replace("\n"," ").replace("  "," ")
+            content_text = content.get_text().replace("  "," ")
 
         parsing_item = self.parsing_content_items(title.get_text().replace("\n"," "),
                                                             response.meta["filename"],
                                                             response.meta["init_url"],
                                                             response.url,
-                                                            content_text)
+                                                            content_text,
+                                                            response.meta["keyword"])
         yield parsing_item
 
 
-    def parsing_content_items(self, title, filename, init_url, content_url, content):
+    def parsing_content_items(self, title, filename, init_url, content_url, content, keyword):
         item = ContentItem()
         item['filename'] = filename
         item['init_url'] = init_url
@@ -166,6 +167,7 @@ class NaverSpider(Spider):
         item['title'] = title
         item['context'] = content
         item['crawled_at'] = datetime.date.today().isoformat()
+        item['keyword'] = keyword
         return item
 
 

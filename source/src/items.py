@@ -14,3 +14,4 @@ class ContentItem(scrapy.Item):
     title = scrapy.Field()                  #글 제목
     context = scrapy.Field()                #글 내용
     crawled_at = scrapy.Field()             #크롤링 일자
+    keyword = scrapy.Field()

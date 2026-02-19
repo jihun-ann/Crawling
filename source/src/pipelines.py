@@ -31,5 +31,5 @@ class SrcPipeline:
                 json.dump(dict(item), f, ensure_ascii=False)
 
         except Exception as e:
-            logger.error(f"BlogContentLoader|file_load Error|{e}")
+            logger.exception(f"BlogContentLoader|file_load Error|{e}")
 
