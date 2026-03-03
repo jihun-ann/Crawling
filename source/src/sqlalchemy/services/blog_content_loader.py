@@ -2,12 +2,14 @@ import json
 import logging
 import re
 import urllib.parse
+from os import access
 
 import requests
 from bs4 import BeautifulSoup
 from scrapy.utils.project import get_project_settings
 from pathlib import Path
 
+from source.src.api.token import total_token
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -44,8 +46,11 @@ class BlogContentLoader:
                                     if first_address == "" : first_address = add
 
                                     print(file_data["filename"])
-                                    sub_place_list = self.find_place_name(add)
                                     sub_json = {}
+                                    sub_place_list = self.find_place_name(add)
+                                    if not sub_place_list:
+                                        logger.error(f"BlogContentLoader|sub place not found|sub_place_list is None|{file_data["title"]}|{add}")
+                                        break
                                     for sub_place in sub_place_list:
                                         sub_place_name = sub_place.get_text()
                                         count = len(re.findall(re.escape(sub_place_name), file_data["context"]))
@@ -57,7 +62,9 @@ class BlogContentLoader:
                                         ignore_keyword = {"주차장","병원","유치원"}
                                         if any(k in place_name for k in ignore_keyword):
                                             continue
-                                        self.retrive_place(place_name)
+                                        self.retrive_place(place_name, add)
+                                    else:
+                                        continue
                                     idx += 1
                             #     print(file_data)
                             #     print(file_data["title"])
@@ -66,7 +73,28 @@ class BlogContentLoader:
         except Exception as e:
             logger.exception(f"BlogContentLoader|file_load Error|{e}")
 
-    def retrive_place(self, place_name):
+    def retrive_place(self, place_name, address):
+        settings = get_project_settings()
+        search_query = urllib.parse.quote(f"{place_name} {address}")
+        url = f"https://openapi.naver.com/v1/search/local.xml?query={search_query}&display=5"
+        headers = {"X-Naver-Client-Id": settings.get("NAVER_CLIENT_ID"),"X-Naver-Client-Secret": settings.get("NAVER_CLIENT_KEY")}
+        search_response = requests.get(url, headers=headers)
+
+        if search_response.status_code == 200:
+            soup = BeautifulSoup(search_response.text, "xml")
+            place_items = soup.find_all("item")
+            if place_items and len(place_items) == 1:
+                for item in place_items:
+                    if address in item.find("roadAddress"):
+                        "https://m.map.naver.com/search?query=%EC%88%9C%EC%A0%95%EB%B0%98%EC%A0%90%20%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C%20%EA%B0%95%EC%84%9C%EA%B5%AC%20%EA%B8%88%EB%82%AD%ED%99%94%EB%A1%9C%20103&type=all&searchCoord=126.8114612;37.5747343&displayCount=%205"
+                        #여기로 조회해서 placeID 추출
+                return None
+            else:
+                return None
+        else:
+            return None
+
+
 
 
 
@@ -78,9 +106,10 @@ class BlogContentLoader:
         if search_response.status_code == 200 :
             soup = BeautifulSoup(search_response.text,"html.parser")
             loc_main = soup.select_one("#loc-main-section-root")
-            sub_place_list = loc_main.select("div ._5Dken")
-
-            return sub_place_list
+            if loc_main:
+                sub_place_list = loc_main.select("div ._5Dken")
+                return sub_place_list
+            return None
         else :
             return None
 

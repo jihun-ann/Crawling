@@ -8,7 +8,7 @@
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
 BOT_NAME = "source"
-BASE_DIR = "C:\WorkSpace\Crawling"
+BASE_DIR = "C:\\workspace\\Crawling"
 
 SPIDER_MODULES = ["source.src.spiders"]
 NEWSPIDER_MODULE = "source.src.spiders"
@@ -22,8 +22,20 @@ DB_PASSWORD = "passw0rd"
 DB_SCHEMA = "postgres"
 
 LOG_LEVEL = "INFO"
-CLIENT_ID = "8d41a625e0d647188adb"
-CLIENT_KEY = "6aadddfbcc90465589f4"
+
+#SGIS
+SGIS_CLIENT_ID = "8d41a625e0d647188adb"
+SGIS_CLIENT_KEY = "6aadddfbcc90465589f4"
+#Naver Cloud API Test
+NCLOUD_CLIENT_ID = "u4yov52wtz"
+NCLOUD_CLIENT_KEY = "9HMg4FXK2efxoGQNv3qB89tj6WYtxBQ6HNbdHGnK"
+#Naver Developer Test1
+NAVER_CLIENT_ID = "OyuBZVnfbn0mOSkZl4lQ"
+NAVER_CLIENT_KEY = "unb1SMMQNT"
+#Naver Developer Test2
+# NAVER_CLIENT_ID = "lBn2OlsTkSAo6Dyr6h1c"
+# NAVER_CLIENT_KEY = "rFc99bozMu"
+
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = "src (+http://www.yourdomain.com)"
 
