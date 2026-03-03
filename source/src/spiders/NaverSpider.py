@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from scrapy.utils.project import get_project_settings
 from urllib.parse import urlparse, parse_qs
 
+from source.src.api.token import total_token
 from source.src.items import ContentItem
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -172,17 +173,10 @@ class NaverSpider(Spider):
 
 
     def location_list(self, prov):
-        settings = get_project_settings()
-        client_param = {"consumer_key":f"{settings.get("CLIENT_ID")}","consumer_secret":f"{settings.get("CLIENT_KEY")}"}
-        token_url = "https://sgisapi.mods.go.kr/OpenAPI3/auth/authentication.json"
-        token_response = requests.get(token_url,params=client_param)
-
         q = deque()
+        access_token = total_token.get_sgis_access_token()
 
-        if token_response.status_code == 200 :
-            access_token_json = token_response.json()
-            access_token = access_token_json["result"]["accessToken"]
-
+        if access_token:
             stage_url = "https://sgisapi.mods.go.kr/OpenAPI3/addr/stage.json"
 
             resource_path = resources.files("source.src.properties")
@@ -213,12 +207,13 @@ class NaverSpider(Spider):
                             q.append(stage["full_addr"])
 
                     else:
-                        logger.error(f"Error Full Stage Retrived: {token_response.text}")
+                        logger.error(f"Error Full Stage Retrived: {full_stage_response.text}")
             else :
-                logger.error(f"Error Stage Retrived: {token_response.text}")
+                logger.error(f"Error Stage Retrived: {stage_gu_response.text}")
             return q
         else :
-            logger.error(f"Error Code: {token_response.text}")
+            logger.error(f"Not Have Token: {access_token}")
+            return None
 
     def location_name(self, prov_value):
         q = deque()
