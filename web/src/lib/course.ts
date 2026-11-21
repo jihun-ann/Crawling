@@ -11,16 +11,32 @@ export const MODES: { id: Mode; label: string; desc: string }[] = [
 export const TRANSPORTS = ["자동차", "대중교통", "KTX/기차", "도보"];
 export const MOODS = ["조용한", "할 게 많은", "자연", "감성/사진"];
 
-export type Place = { id: number; name: string; category: string; address: string };
-export type Step = { time: string; category: string; place: Place; alternatives: Place[] };
-export type Course = { title: string; steps: Step[] };
+export type Place = {
+  id: number; name: string; category: string; address: string;
+  lat: number; lng: number; score?: number; moods?: string[]; review_count?: number; phone?: string | null;
+};
+export type Step = { time: string; category: string; travel_min: number; place: Place; alternatives: Place[] };
+export type Course = { title: string; message: string | null; steps: Step[] };
+export type Review = { title: string; url: string; platform: string; posted_at: string | null; is_negative: boolean };
+export type PlaceDetail = Place & { naver_category: string | null; reviews: Review[] };
 
 const API_URL = process.env.API_URL ?? "http://localhost:8000";
 
 // 서버 컴포넌트에서 호출 → 서버 간 통신이라 CORS 불필요
-export async function getCourse(params: Record<string, string | undefined>): Promise<Course> {
+// 4xx(위치 못 찾음 등)는 API의 안내 문구를 그대로 반환해 화면에 표시. 서버 다운 등은 throw → app/error.tsx
+async function api<T>(path: string): Promise<{ data: T } | { error: string }> {
+  const res = await fetch(`${API_URL}${path}`);
+  if (res.ok) return { data: await res.json() };
+  if (res.status >= 500) throw new Error(`API 오류 ${res.status}`);
+  const body = await res.json().catch(() => ({}));
+  return { error: typeof body.detail === "string" ? body.detail : "요청을 처리할 수 없어요." };
+}
+
+export function getCourse(params: Record<string, string | undefined>) {
   const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => !!e[1]));
-  const res = await fetch(`${API_URL}/courses/recommend?${query}`);
-  if (!res.ok) throw new Error(`코스 추천 API 오류 ${res.status}`);
-  return res.json();
+  return api<Course>(`/courses/recommend?${query}`);
+}
+
+export function getPlace(id: string) {
+  return api<PlaceDetail>(`/places/${encodeURIComponent(id)}`);
 }

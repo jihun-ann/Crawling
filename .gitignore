@@ -4,3 +4,4 @@ Crawling.iml
 __pycache__/
 .env
 dbs/
+logs/
