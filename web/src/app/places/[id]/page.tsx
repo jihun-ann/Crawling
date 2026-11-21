@@ -1,7 +1,7 @@
 // 장소 상세 (/places/[id]): 기본 정보 + 분위기 태그 + 블로그 후기 링크
 import { Suspense } from "react";
 import Link from "next/link";
-import { getPlace } from "@/lib/course";
+import { getPlace, WEEKDAYS } from "@/lib/course";
 
 async function PlaceView({ params }: { params: PageProps<"/places/[id]">["params"] }) {
   const { id } = await params;
@@ -20,6 +20,26 @@ async function PlaceView({ params }: { params: PageProps<"/places/[id]">["params
         {p.phone && <div><dt className="inline text-zinc-500">전화 </dt><dd className="inline"><a href={`tel:${p.phone}`}>{p.phone}</a></dd></div>}
         <div><dt className="inline text-zinc-500">후기 </dt><dd className="inline">{p.review_count}건</dd></div>
       </dl>
+      {p.hours && (
+        <table className="mt-6 text-sm">
+          <caption className="mb-2 text-left font-semibold">영업시간</caption>
+          <tbody>
+            {WEEKDAYS.filter((d) => d in p.hours!).map((d) => {
+              const h = p.hours![d];
+              return (
+                <tr key={d}>
+                  <th scope="row" className="pr-4 text-left font-normal text-zinc-500">{d}</th>
+                  <td>
+                    {h ? `${h.open}~${h.close}` : "휴무"}
+                    {h?.breaks.length ? ` · 브레이크 ${h.breaks.map(([s, e]) => `${s}~${e}`).join(", ")}` : ""}
+                    {h?.last_order ? ` · 라스트오더 ${h.last_order}` : ""}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
       {p.moods && p.moods.length > 0 && (
         <ul className="mt-4 flex flex-wrap gap-2">
           {p.moods.map((m) => <li key={m} className="rounded-full border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">{m}</li>)}

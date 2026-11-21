@@ -11,12 +11,19 @@ export const MODES: { id: Mode; label: string; desc: string }[] = [
 export const TRANSPORTS = ["자동차", "대중교통", "KTX/기차", "도보"];
 export const MOODS = ["조용한", "할 게 많은", "자연", "감성/사진"];
 
+// 요일별 영업시간 (API hours.py 저장 형식). null = 휴무, 키 없음 = 정보 없음
+export type DayHours = { open: string; close: string; breaks: [string, string][]; last_order: string | null } | null;
 export type Place = {
   id: number; name: string; category: string; address: string;
   lat: number; lng: number; score?: number; moods?: string[]; review_count?: number; phone?: string | null;
+  city?: string | null; hours?: Record<string, DayHours> | null;
 };
-export type Step = { time: string; category: string; travel_min: number; place: Place; alternatives: Place[] };
-export type Course = { title: string; message: string | null; steps: Step[] };
+export type Step = {
+  time: string; category: string; travel_min: number; place: Place; alternatives: Place[];
+  hours_today: string | null; warning: string | null;
+};
+export type Course = { title: string; message: string | null; date?: string; weekday?: string; steps: Step[] };
+export const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
 export type Review = { title: string; url: string; platform: string; posted_at: string | null; is_negative: boolean };
 export type PlaceDetail = Place & { naver_category: string | null; reviews: Review[] };
 
@@ -35,6 +42,11 @@ async function api<T>(path: string): Promise<{ data: T } | { error: string }> {
 export function getCourse(params: Record<string, string | undefined>) {
   const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => !!e[1]));
   return api<Course>(`/courses/recommend?${query}`);
+}
+
+// 크롤링으로 저장된 테마파크 목록 (지역 선택 화면의 선택지)
+export function getThemeParks() {
+  return api<Place[]>(`/places?category=${encodeURIComponent("테마파크")}&limit=200`);
 }
 
 export function getPlace(id: string) {

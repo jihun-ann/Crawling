@@ -22,6 +22,7 @@ async function CourseView({ searchParams }: { searchParams: PageProps<"/course">
   return (
     <>
       <h1 className="text-2xl font-bold">{course.title}</h1>
+      {course.date && <p className="mt-1 text-sm text-zinc-500">{course.date} ({course.weekday}) 영업시간 기준</p>}
       {course.message && <p className="mt-4 rounded-lg bg-zinc-100 p-4 dark:bg-zinc-900">{course.message}</p>}
       <CourseMap points={course.steps.map((s) => ({ lat: s.place.lat, lng: s.place.lng, label: s.place.name }))} />
       <ol className="mt-8 border-l-2 border-zinc-200 dark:border-zinc-800">
@@ -32,6 +33,8 @@ async function CourseView({ searchParams }: { searchParams: PageProps<"/course">
               {s.time} · {s.category}{s.travel_min > 0 && ` · 이동 약 ${s.travel_min}분`}
             </div>
             <div className="mt-1 text-lg font-semibold"><PlaceName place={s.place} /></div>
+            {s.hours_today && <div className="text-sm text-zinc-600 dark:text-zinc-400">영업 {s.hours_today}</div>}
+            {s.warning && <div className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-400">⚠ {s.warning}</div>}
             {s.place.address && (
               <a href={naverMapUrl(s.place)} target="_blank" rel="noopener noreferrer"
                  className="text-sm text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-400">

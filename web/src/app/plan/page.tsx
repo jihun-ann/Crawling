@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { MODES, MOODS, TRANSPORTS } from "@/lib/course";
+import { MODES, MOODS, TRANSPORTS, getThemeParks } from "@/lib/course";
 
 const input = "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700";
 
@@ -33,6 +33,22 @@ function Choice({ label, name, options }: { label: string; name: string; options
   );
 }
 
+// 테마파크 선택: 크롤링으로 저장된 테마파크 중에서 고름 (값 = place id)
+async function ThemeSelect() {
+  const result = await getThemeParks();
+  const parks = "data" in result ? result.data : [];
+  return (
+    <label className="grid gap-1 text-sm font-medium">
+      테마파크 (선택)
+      <select name="theme" defaultValue="" className={input}>
+        <option value="">선택 안 함</option>
+        {parks.map((p) => <option key={p.id} value={p.id}>{p.name}{p.city && ` · ${p.city}`}</option>)}
+      </select>
+      {parks.length === 0 && <span className="text-xs font-normal text-zinc-500">아직 수집된 테마파크가 없어요.</span>}
+    </label>
+  );
+}
+
 async function PlanForm({ searchParams }: { searchParams: PageProps<"/plan">["searchParams"] }) {
   const { mode } = await searchParams;
   const m = MODES.find((x) => x.id === mode && x.id !== "random");
@@ -45,7 +61,8 @@ async function PlanForm({ searchParams }: { searchParams: PageProps<"/plan">["se
         <input type="hidden" name="mode" value={m.id} />
         {m.id === "region" && (
           <>
-            <Field label="지역" name="region" required placeholder="예: 강원도 강릉" />
+            <Field label="지역" name="region" placeholder="예: 강원도 강릉 (테마파크만 골랐다면 비워도 돼요)" />
+            <ThemeSelect />
             <Field label="숙소 (선택)" name="stay" placeholder="숙소 이름 또는 주소" />
           </>
         )}
@@ -61,7 +78,10 @@ async function PlanForm({ searchParams }: { searchParams: PageProps<"/plan">["se
             <Field label="출발지" name="from" required placeholder="예: 서울역" />
           </>
         )}
-        <Field label="출발 시간" name="start" type="time" defaultValue="09:00" required />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="날짜 (비우면 오늘)" name="date" type="date" />
+          <Field label="출발 시간" name="start" type="time" defaultValue="09:00" required />
+        </div>
         <button className="mt-2 rounded-lg bg-zinc-900 py-3 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
           코스 추천받기
         </button>

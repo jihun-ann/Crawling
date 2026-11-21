@@ -19,6 +19,9 @@ This project crawls Naver blog posts, calculates an interest score based on the 
 
 ### Crawling (API와 별도 실행)
 >scrapy crawl naver_crawling -a prov=서울특별시
+>scrapy crawl naver_crawling -a query="용인 에버랜드 후기"   # 검색어 하나만 크롤링
+
+크롤링한 글 → `blog_content_loader`가 장소를 찾아 영업시간과 함께 DB에 저장 → API는 저장된 장소만 추천
 
 추가 수집기 (.env에 키 필요)
 >scrapy crawl daum_crawling -a query="강릉 카페"        # Tistory 등, KAKAO_REST_API_KEY

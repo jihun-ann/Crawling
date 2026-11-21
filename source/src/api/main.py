@@ -1,4 +1,5 @@
 # 웹(Next.js)이 호출하는 백엔드 API. 실행: python -m uvicorn source.src.api.main:app --port 8000 (문서: /docs)
+import datetime
 import json
 import logging
 import math
@@ -12,6 +13,7 @@ from scrapy.utils.project import get_project_settings
 from sqlalchemy.orm import Session
 
 from source.src.api.course import COURSE_ORDER, SEARCH_RADIUS_KM, DEFAULT_TRANSPORT, build_course
+from source.src.hours import WEEKDAYS
 from source.src.sqlalchemy import database
 from source.src.sqlalchemy.models.place_model import Place, PlaceReview
 
@@ -20,7 +22,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 settings = get_project_settings()
 
-Text = Query(None, max_length=50)   # 사용자 입력 문자열 공통 제한
+def Text():
+    return Query(None, max_length=50)   # 사용자 입력 문자열 공통 제한 (파라미터마다 새 객체 필요)
+KST = datetime.timezone(datetime.timedelta(hours=9))   # '오늘' 기준 (서버 시간대와 무관하게 한국 시간)
 
 
 def get_db():
@@ -38,7 +42,9 @@ def place_dict(p: Place):
             "lat": p.latitude, "lng": p.longitude, "score": round(p.score or 0, 2),
             "moods": json.loads(p.keywords) if p.keywords and p.keywords.startswith("[") else [],
             "review_count": p.review_count_blog or 0, "negative_ratio": p.negative_ratio or 0,
-            "phone": p.phone_number}
+            "phone": p.phone_number, "city": p.location_city,
+            # hours.py 저장 형식. 예전 테스트 데이터('09:00~22:00' 같은 문자열)는 정보 없음으로 처리
+            "hours": json.loads(p.business_hours) if (p.business_hours or "").startswith("{") else None}
 
 
 def places_near(db: Session, lat, lng, radius_km, category=None):
@@ -67,7 +73,7 @@ def geocode(query):
 
 
 @app.get("/places")
-def list_places(region: str | None = Text, category: str | None = Text,
+def list_places(region: str | None = Text(), category: str | None = Text(),
                 lat: float | None = Query(None, ge=-90, le=90), lng: float | None = Query(None, ge=-180, le=180),
                 radius_km: float = Query(3, gt=0, le=50), limit: int = Query(50, ge=1, le=200),
                 db: Session = Depends(get_db)):
@@ -102,20 +108,37 @@ def get_place(place_id: int, db: Session = Depends(get_db)):
 @app.get("/courses/recommend")
 def recommend_course(
     mode: Literal["region", "transport", "mood", "random"] = "random",
-    region: str | None = Text,
-    stay: str | None = Text,
-    transport: str | None = Text,
-    mood: str | None = Text,
+    region: str | None = Text(),
+    stay: str | None = Text(),
+    transport: str | None = Text(),
+    mood: str | None = Text(),
     from_: str | None = Query(None, alias="from", max_length=50),
     start: str = Query("09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$"),
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    theme: int | None = Query(None, ge=1),
     db: Session = Depends(get_db),
 ):
-    """코스 추천. 웹 /course 화면이 호출.
+    """코스 추천. 웹 /course 화면이 호출. 크롤링으로 저장된 장소(place)만 추천.
 
     mode: region(지역) / transport(교통수단) / mood(분위기) / random
     region·stay: 지역·숙소, transport: 교통수단, mood: 분위기, from: 출발지, start: 출발 시간(HH:MM)
-    응답: {title, message, steps: [{time, category, travel_min, place, alternatives}]}
+    date: 출발 날짜(YYYY-MM-DD, 없으면 오늘) → 그 요일 영업시간으로 휴무/영업 전후 장소 제외
+    theme: 꼭 갈 테마파크의 place_id (GET /places?category=테마파크 목록에서 선택)
+    응답: {title, message, weekday, steps: [{time, category, travel_min, place, alternatives, hours_today, warning}]}
     """
+    try:
+        day = datetime.date.fromisoformat(date) if date else datetime.datetime.now(KST).date()
+    except ValueError:
+        raise HTTPException(422, "날짜 형식이 올바르지 않아요")
+    weekday = WEEKDAYS[day.weekday()]
+
+    anchor = None
+    if theme:
+        row = db.get(Place, theme)
+        if not row or row.latitude is None:
+            raise HTTPException(404, "선택한 테마파크를 찾을 수 없어요")
+        anchor = place_dict(row)
+
     if mode == "random":
         top = (db.query(Place).filter(Place.category.in_(COURSE_ORDER), Place.latitude.isnot(None))
                .order_by(Place.score.desc()).limit(20).all())
@@ -125,19 +148,27 @@ def recommend_course(
         origin = {"name": f"{anchor.name} 근처", "address": anchor.location_detail,
                   "lat": anchor.latitude, "lng": anchor.longitude}
         title = f"랜덤 코스 · {anchor.location_city or ''}".strip(" ·")
+    elif anchor and not (stay or from_):
+        origin = anchor                                         # 숙소/출발지 없이 테마파크만 → 테마파크에서 시작
+        title = f"{anchor['name']} 코스"
     else:
         query = stay or from_ or region
         if not query:
-            raise HTTPException(422, "지역, 숙소 또는 출발지를 입력해 주세요")
+            raise HTTPException(422, "지역, 숙소, 출발지 또는 테마파크를 입력해 주세요")
         origin = geocode(" ".join(filter(None, [region if stay else None, query])))
         if not origin:
             raise HTTPException(404, f"'{query}' 위치를 찾지 못했어요")
         origin["name"] = query
-        title = (f"{region} 코스" if region else f"{mood} 분위기 코스" if mood
+        title = (f"{anchor['name']} 코스" if anchor else f"{region} 코스" if region else f"{mood} 분위기 코스" if mood
                  else f"{transport}로 떠나는 코스" if transport else "추천 코스")
 
+    # 테마파크가 있으면 그 주변에서, 없으면 출발지 주변에서 후보를 찾음
+    center = anchor or origin
     radius = SEARCH_RADIUS_KM.get(transport or DEFAULT_TRANSPORT, SEARCH_RADIUS_KM[DEFAULT_TRANSPORT])
-    places = [place_dict(p) for p in places_near(db, origin["lat"], origin["lng"], radius)]
-    steps = build_course(origin, places, start, transport, mood)
-    message = None if len(steps) > 1 else "이 주변에는 아직 추천할 장소 데이터가 없어요. 다른 지역을 입력해 보세요."
-    return {"title": title, "message": message, "steps": steps}
+    places = [place_dict(p) for p in places_near(db, center["lat"], center["lng"], radius)]
+    steps = build_course(origin, places, start, transport, mood, weekday, anchor)
+    picked = [s for s in steps if s["place"]["id"] not in (0, (anchor or {}).get("id"))]
+    message = (None if picked
+               else "이 시간대에 영업 중인 추천 장소를 주변에서 찾지 못했어요. 출발 시간이나 날짜를 바꿔 보세요." if places
+               else "이 주변에는 아직 추천할 장소 데이터가 없어요. 다른 지역을 입력해 보세요.")
+    return {"title": title, "message": message, "weekday": weekday, "date": day.isoformat(), "steps": steps}

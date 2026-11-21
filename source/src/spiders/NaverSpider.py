@@ -31,7 +31,11 @@ class NaverSpider(Spider):
     platform = "naver"      # 저장 폴더명 (blog_content/naver)
 
     def start_requests(self):
-        """크롤링 시작점. 지역 목록 × 키워드 목록으로 검색 요청 생성 (현재는 단건 테스트용 고정 검색어)."""
+        """크롤링 시작점. 지역 목록 × 키워드 목록으로 검색 요청 생성 (현재는 단건 테스트용 고정 검색어).
+        -a query="용인 테마파크" 를 주면 그 검색어 하나만 크롤링."""
+        if getattr(self, "query", None):
+            yield from self.searching_naver(self.query, 1, self.query)
+            return
         province = self.prov
         location_q = self.location_list(province)
         # location_q = self.location_name(province)

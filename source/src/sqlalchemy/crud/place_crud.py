@@ -43,12 +43,12 @@ def upsert_place(db: Session, new_place: Place):
     return result
 
 def save_place(db: Session, place: dict):
-    """장소 저장. (상호명, 도로명주소)가 같으면 기본 정보만 갱신. place_id 반환."""
+    """장소 저장. (상호명, 도로명주소)가 같으면 기본 정보만 갱신 (값이 None인 항목은 기존 값 유지). place_id 반환."""
     from sqlalchemy.dialects.postgresql import insert
     stmt = insert(Place).values(**place)
     stmt = stmt.on_conflict_do_update(
         index_elements=["name", "location_detail"],
-        set_={k: stmt.excluded[k] for k in place if k not in ("name", "location_detail")},
+        set_={k: stmt.excluded[k] for k, v in place.items() if k not in ("name", "location_detail") and v is not None},
     ).returning(Place.place_id)
     place_id = db.execute(stmt).scalar()
     db.commit()

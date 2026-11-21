@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import re
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from bs4 import BeautifulSoup
 from scrapy.utils.project import get_project_settings
 
 from source.src.content_filter import is_negative, mood_tags, normalize_category
+from source.src.hours import open_days, parse_naver_hours
 from source.src.sqlalchemy import database
 from source.src.sqlalchemy.crud import place_crud
 
@@ -23,7 +25,8 @@ ROAD = r'[가-힣\d]+(?:로|길)(?:[ \t]*\d+번?길)?'
 BUILDING_INFO = r'\d{1,4}(?:-\d{1,4})?'
 ADDRESS_PATTERN = re.compile(rf'(?:(?:{SI_DO}[ \t]+)?{SI_GUN_GU}[ \t]+){ROAD}[ \t]+{BUILDING_INFO}')
 
-IGNORE_PLACE_KEYWORDS = ("주차장", "병원", "유치원", "약국", "은행")
+IGNORE_PLACE_KEYWORDS = ("주차장", "병원", "유치원", "약국", "은행", "아파트", "호선", "주민센터", "학교")
+MOBILE_UA = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"}
 
 
 def _nospace(s):
@@ -121,8 +124,14 @@ class BlogContentLoader:
             if _nospace(address) not in _nospace(road):
                 continue
             parts = road.split()
+            name = re.sub(r"<[^>]+>", "", item["title"])
+            hours = self.fetch_hours(name, road)
             return {
-                "name": re.sub(r"<[^>]+>", "", item["title"]),     # 검색어 강조 <b> 태그 제거
+                "business_hours": json.dumps(hours, ensure_ascii=False) if hours else None,
+                "business_days": open_days(hours),
+                "break_time": json.dumps(sorted({tuple(b) for d in hours.values() if d for b in d["breaks"]}))
+                              if hours else None,
+                "name": name,
                 "type": item.get("category"),
                 "category": normalize_category(item.get("category")),
                 "phone_number": item.get("telephone") or None,
@@ -134,6 +143,37 @@ class BlogContentLoader:
                 "crawled_at": datetime.date.today().isoformat(),
             }
         return None
+
+    def fetch_hours(self, name, road_address):
+        """네이버 모바일 지도 검색으로 플레이스 ID를 찾고, 플레이스 페이지에서 요일별 영업시간 수집. 실패하면 None."""
+        # ponytail: 네이버 화면 내부 데이터(__RQ_STREAMING_STATE__, __APOLLO_STATE__) 구조에 의존. 개편되면 None만 나옴
+        try:
+            # 상세주소(층/호수)까지 넣으면 검색 결과가 비어서 "상호명 + 시/구"로 검색, 도로명+건물번호까지만 비교
+            parts = road_address.split()
+            road_base = _nospace(" ".join(parts[:4]))
+            q = urllib.parse.quote(f"{name} {' '.join(parts[:2])}")
+            res = requests.get(f"https://m.map.naver.com/search?query={q}&type=all&displayCount=5",
+                               headers=MOBILE_UA, timeout=10)
+            place_id = None
+            for chunk in re.findall(r'window\.__RQ_STREAMING_STATE__\.push\((.*?)\);', res.content.decode("utf-8")):
+                for query in json.loads(chunk).get("queries", []):
+                    data = query.get("state", {}).get("data")
+                    for it in (data.get("items") or []) if isinstance(data, dict) else []:
+                        if _nospace(it.get("name", "")) == _nospace(name) or road_base in _nospace(it.get("roadAddress") or ""):
+                            place_id = place_id or it["id"]
+            if not place_id:
+                return None
+            time.sleep(0.3)     # 연속 요청 간격
+            page = requests.get(f"https://m.place.naver.com/place/{place_id}/home", headers=MOBILE_UA, timeout=10)
+            m = re.search(r'window\.__APOLLO_STATE__\s*=\s*(\{.*?\});', page.content.decode("utf-8"), re.S)
+            if not m:
+                return None
+            root = json.loads(m.group(1)).get("ROOT_QUERY", {})
+            detail = next((v for k, v in root.items() if k.startswith("placeDetail(") and isinstance(v, dict)), {})
+            return parse_naver_hours(detail.get("newBusinessHours"))
+        except Exception as e:
+            logger.warning(f"BlogContentLoader|영업시간 수집 실패|{name}|{e}")
+            return None
 
     def find_place_name(self, address):
         """주소로 네이버 통합검색 → 해당 주소에 있는 장소(상호명) 후보 목록 반환. 없으면 None."""
