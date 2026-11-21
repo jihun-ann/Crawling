@@ -16,7 +16,7 @@ from urllib.parse import urlparse, parse_qs
 
 from source.src.api.token import total_token
 from source.src.items import ContentItem
-from source.src.content_filter import content_id
+from source.src.content_filter import content_id, parse_post_date
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -151,30 +151,31 @@ class NaverSpider(Spider):
     def parse_main_container_export(self, response):
         """iframe 본문 페이지에서 제목/본문 텍스트 추출 → ContentItem 생성 (스마트에디터, 카페, 구버전 에디터 순으로 시도)."""
         soup = BeautifulSoup(response.text,"html.parser")
-        title = str
-        content_text = str
-        content = (soup.select_one("div.se-main-container") or soup.select_one("div.ContentRenderer")) #se-main-container는 블로그용, div.ContentRenderer 카페용
+        # 본문: 스마트에디터(블로그) → 카페 → 구버전 에디터(블로그) 순
+        content = (soup.select_one("div.se-main-container") or soup.select_one("div.ContentRenderer")
+                   or soup.select_one("#postViewArea"))
+        if content is None:
+            logger.warning(f"본문 영역 없음, 건너뜀: {response.url}")
+            return
 
-        if content is not None:
-            title = (soup.select_one("div.se-title-text") or soup.select_one("h3.title_text"))    #se-title-text는 블로그용, title_text 카페용
-            content_text = content.get_text().replace("  "," ")
+        title_tag = (soup.select_one("div.se-title-text") or soup.select_one("h3.title_text")
+                     or soup.select_one("div.htitle") or soup.title)
+        title = title_tag.get_text().replace("\n", " ") if title_tag else ""
+        date_tag = soup.select_one("span.se_publishDate") or soup.select_one("p.date") or soup.select_one("span.date")
 
-        elif soup.select("#postViewArea") is not None :
-            content = soup.select_one("#postViewArea")
-            content_text = content.get_text().replace("  "," ")
-
-        parsing_item = self.parsing_content_items(title.get_text().replace("\n"," "),
-                                                            response.meta["filename"],
-                                                            response.meta["init_url"],
-                                                            response.url,
-                                                            content_text,
-                                                            response.meta["keyword"])
-        yield parsing_item
+        yield self.parsing_content_items(title,
+                                         response.meta["filename"],
+                                         response.meta["init_url"],
+                                         response.url,
+                                         content.get_text().replace("  "," "),
+                                         response.meta["keyword"],
+                                         parse_post_date(date_tag.get_text() if date_tag else ""))
 
 
-    def parsing_content_items(self, title, filename, init_url, content_url, content, keyword):
+    def parsing_content_items(self, title, filename, init_url, content_url, content, keyword, posted_at=None):
         """추출한 값으로 ContentItem 생성. 이후 pipelines.SrcPipeline이 필터링 후 저장."""
         item = ContentItem()
+        item['posted_at'] = posted_at
         item['filename'] = filename
         item['init_url'] = init_url
         item['content_url'] = content_url
