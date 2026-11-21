@@ -44,9 +44,9 @@ export function getCourse(params: Record<string, string | undefined>) {
   return api<Course>(`/courses/recommend?${query}`);
 }
 
-// 크롤링으로 저장된 테마파크 목록 (지역 선택 화면의 선택지)
-export function getThemeParks() {
-  return api<Place[]>(`/places?category=${encodeURIComponent("테마파크")}&limit=200`);
+// 가볼만한 곳 세부 종류 (수집된 장소의 네이버 업종에서 나옴: 테마파크, 수목원,식물원, 공원 ...) + 종류별 장소 수
+export function getSpotTypes() {
+  return api<{ type: string; count: number }[]>("/spot-types");
 }
 
 export function getPlace(id: string) {

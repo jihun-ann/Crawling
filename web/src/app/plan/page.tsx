@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { MODES, MOODS, TRANSPORTS, getThemeParks } from "@/lib/course";
+import { MODES, MOODS, TRANSPORTS, getSpotTypes } from "@/lib/course";
 
 const input = "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700";
 
@@ -33,18 +33,19 @@ function Choice({ label, name, options }: { label: string; name: string; options
   );
 }
 
-// 테마파크 선택: 크롤링으로 저장된 테마파크 중에서 고름 (값 = place id)
-async function ThemeSelect() {
-  const result = await getThemeParks();
-  const parks = "data" in result ? result.data : [];
+// 가볼만한 곳 종류 선택. 선택지는 크롤링으로 수집된 장소의 업종에서 나옴 (고정 목록 없음)
+// 어느 곳으로 갈지는 시스템이 숙소·지역 기준으로 고름
+async function SpotTypeSelect() {
+  const result = await getSpotTypes();
+  const types = "data" in result ? result.data : [];
   return (
     <label className="grid gap-1 text-sm font-medium">
-      테마파크 (선택)
-      <select name="theme" defaultValue="" className={input}>
+      가볼만한 곳 (선택)
+      <select name="spot_type" defaultValue="" className={input}>
         <option value="">선택 안 함</option>
-        {parks.map((p) => <option key={p.id} value={p.id}>{p.name}{p.city && ` · ${p.city}`}</option>)}
+        {types.map((t) => <option key={t.type} value={t.type}>{t.type}</option>)}
       </select>
-      {parks.length === 0 && <span className="text-xs font-normal text-zinc-500">아직 수집된 테마파크가 없어요.</span>}
+      {types.length === 0 && <span className="text-xs font-normal text-zinc-500">아직 수집된 장소가 없어요.</span>}
     </label>
   );
 }
@@ -61,8 +62,8 @@ async function PlanForm({ searchParams }: { searchParams: PageProps<"/plan">["se
         <input type="hidden" name="mode" value={m.id} />
         {m.id === "region" && (
           <>
-            <Field label="지역" name="region" placeholder="예: 강원도 강릉 (테마파크만 골랐다면 비워도 돼요)" />
-            <ThemeSelect />
+            <Field label="지역" name="region" placeholder="예: 강원도 강릉 (가볼만한 곳만 골랐다면 비워도 돼요)" />
+            <SpotTypeSelect />
             <Field label="숙소 (선택)" name="stay" placeholder="숙소 이름 또는 주소" />
           </>
         )}

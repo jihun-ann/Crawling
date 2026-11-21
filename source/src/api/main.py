@@ -12,7 +12,8 @@ from fastapi import FastAPI, Depends, Query, HTTPException
 from scrapy.utils.project import get_project_settings
 from sqlalchemy.orm import Session
 
-from source.src.api.course import COURSE_ORDER, SEARCH_RADIUS_KM, DEFAULT_TRANSPORT, build_course
+from source.src.api.course import COURSE_ORDER, SEARCH_RADIUS_KM, DEFAULT_TRANSPORT, build_course, haversine_km
+from source.src.content_filter import spot_type as spot_type_of
 from source.src.hours import WEEKDAYS
 from source.src.sqlalchemy import database
 from source.src.sqlalchemy.models.place_model import Place, PlaceReview
@@ -72,6 +73,37 @@ def geocode(query):
             "lat": int(it["mapy"]) / 10_000_000, "lng": int(it["mapx"]) / 10_000_000}
 
 
+SPOT_DIST_WEIGHT = 0.05     # 가볼만한 곳을 고를 때 1km당 깎는 점수 (일부러 찾아가는 곳이라 일반 장소보다 약하게)
+
+
+def spots(db: Session, kind=None):
+    """저장된 가볼만한 곳(관광지) + 세부 종류(spot_type, 네이버 업종 마지막 단계). kind를 주면 그 종류만."""
+    rows = db.query(Place).filter(Place.category == "관광지", Place.latitude.isnot(None)).all()
+    # category를 세부 종류로 바꿔 코스 단계에 "테마파크", "수목원,식물원"처럼 표시
+    items = [{**place_dict(p), "spot_type": (t := spot_type_of(p.type)), "category": t} for p in rows]
+    return [x for x in items if not kind or x["spot_type"] == kind]
+
+
+def pick_spot(db: Session, kind, origin=None):
+    """종류(kind)의 가볼만한 곳 중 하나 선택. 출발지가 있으면 가깝고 점수 높은 곳, 없으면 점수 가장 높은 곳."""
+    items = spots(db, kind)
+    if not items:
+        return None
+    if not origin:
+        return max(items, key=lambda x: x["score"])
+    return max(items, key=lambda x: x["score"] - SPOT_DIST_WEIGHT *
+               haversine_km(origin["lat"], origin["lng"], x["lat"], x["lng"]))
+
+
+@app.get("/spot-types")
+def list_spot_types(db: Session = Depends(get_db)):
+    """가볼만한 곳 세부 종류 목록 (저장된 데이터에 있는 것만, 많은 순). 웹 선택지용, 장소 이름은 내려주지 않음."""
+    counts = {}
+    for x in spots(db):
+        counts[x["spot_type"]] = counts.get(x["spot_type"], 0) + 1
+    return [{"type": t, "count": n} for t, n in sorted(counts.items(), key=lambda kv: -kv[1])]
+
+
 @app.get("/places")
 def list_places(region: str | None = Text(), category: str | None = Text(),
                 lat: float | None = Query(None, ge=-90, le=90), lng: float | None = Query(None, ge=-180, le=180),
@@ -115,7 +147,7 @@ def recommend_course(
     from_: str | None = Query(None, alias="from", max_length=50),
     start: str = Query("09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$"),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    theme: int | None = Query(None, ge=1),
+    spot_type: str | None = Text(),
     db: Session = Depends(get_db),
 ):
     """코스 추천. 웹 /course 화면이 호출. 크롤링으로 저장된 장소(place)만 추천.
@@ -123,7 +155,7 @@ def recommend_course(
     mode: region(지역) / transport(교통수단) / mood(분위기) / random
     region·stay: 지역·숙소, transport: 교통수단, mood: 분위기, from: 출발지, start: 출발 시간(HH:MM)
     date: 출발 날짜(YYYY-MM-DD, 없으면 오늘) → 그 요일 영업시간으로 휴무/영업 전후 장소 제외
-    theme: 꼭 갈 테마파크의 place_id (GET /places?category=테마파크 목록에서 선택)
+    spot_type: 가볼만한 곳 세부 종류(GET /spot-types, 예: 테마파크/수목원,식물원). 그 종류 중 가깝고 점수 높은 곳을 첫 방문지로
     응답: {title, message, weekday, steps: [{time, category, travel_min, place, alternatives, hours_today, warning}]}
     """
     try:
@@ -133,34 +165,32 @@ def recommend_course(
     weekday = WEEKDAYS[day.weekday()]
 
     anchor = None
-    if theme:
-        row = db.get(Place, theme)
-        if not row or row.latitude is None:
-            raise HTTPException(404, "선택한 테마파크를 찾을 수 없어요")
-        anchor = place_dict(row)
-
     if mode == "random":
         top = (db.query(Place).filter(Place.category.in_(COURSE_ORDER), Place.latitude.isnot(None))
                .order_by(Place.score.desc()).limit(20).all())
         if not top:
             return {"title": "랜덤 코스", "message": "아직 추천할 장소 데이터가 없어요.", "steps": []}
-        anchor = random.choice(top)
-        origin = {"name": f"{anchor.name} 근처", "address": anchor.location_detail,
-                  "lat": anchor.latitude, "lng": anchor.longitude}
-        title = f"랜덤 코스 · {anchor.location_city or ''}".strip(" ·")
-    elif anchor and not (stay or from_):
-        origin = anchor                                         # 숙소/출발지 없이 테마파크만 → 테마파크에서 시작
-        title = f"{anchor['name']} 코스"
+        pick = random.choice(top)
+        origin = {"name": f"{pick.name} 근처", "address": pick.location_detail,
+                  "lat": pick.latitude, "lng": pick.longitude}
+        title = f"랜덤 코스 · {pick.location_city or ''}".strip(" ·")
     else:
         query = stay or from_ or region
-        if not query:
-            raise HTTPException(422, "지역, 숙소, 출발지 또는 테마파크를 입력해 주세요")
-        origin = geocode(" ".join(filter(None, [region if stay else None, query])))
+        origin = None
+        if query:
+            origin = geocode(" ".join(filter(None, [region if stay else None, query])))
+            if not origin:
+                raise HTTPException(404, f"'{query}' 위치를 찾지 못했어요")
+            origin["name"] = query
+        if spot_type:
+            anchor = pick_spot(db, spot_type, origin)
+            if not anchor:
+                raise HTTPException(404, f"아직 수집된 '{spot_type}' 장소가 없어요")
+            origin = origin or anchor                           # 숙소/지역 없이 종류만 → 그 장소에서 시작
         if not origin:
-            raise HTTPException(404, f"'{query}' 위치를 찾지 못했어요")
-        origin["name"] = query
-        title = (f"{anchor['name']} 코스" if anchor else f"{region} 코스" if region else f"{mood} 분위기 코스" if mood
-                 else f"{transport}로 떠나는 코스" if transport else "추천 코스")
+            raise HTTPException(422, "지역, 숙소, 출발지 또는 가볼만한 곳 종류를 입력해 주세요")
+        title = (f"{region + ' ' if region else ''}{spot_type} 코스" if spot_type else f"{region} 코스" if region
+                 else f"{mood} 분위기 코스" if mood else f"{transport}로 떠나는 코스" if transport else "추천 코스")
 
     # 테마파크가 있으면 그 주변에서, 없으면 출발지 주변에서 후보를 찾음
     center = anchor or origin

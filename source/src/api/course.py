@@ -6,7 +6,14 @@ from source.src.hours import describe, is_open
 
 # 코스 순서와 장소별 머무는 시간(분)
 COURSE_ORDER = ["관광지", "카페", "소품샵", "맛집"]
-STAY_MINUTES = {"관광지": 90, "카페": 60, "소품샵": 40, "맛집": 70, "테마파크": 300}
+STAY_MINUTES = {"관광지": 90, "카페": 60, "소품샵": 40, "맛집": 70}
+# 일부러 찾아가는 가볼만한 곳(anchor) 체류 시간: 종일 노는 곳은 길게, 나머지는 2시간
+LONG_STAY_WORDS = ("테마파크", "워터파크", "놀이", "스키")
+LONG_STAY, SPOT_STAY = 300, 120
+
+
+def spot_stay(spot_type):
+    return LONG_STAY if any(w in (spot_type or "") for w in LONG_STAY_WORDS) else SPOT_STAY
 UNKNOWN_HOURS_PENALTY = 0.3   # 영업시간 정보 없는 곳은 확인된 곳보다 약간 뒤로
 
 # 교통수단별 평균 속도(km/h)와 탐색 반경(km)
@@ -59,7 +66,7 @@ def build_course(origin, places, start="09:00", transport=None, mood=None, weekd
     order = COURSE_ORDER
 
     if anchor:
-        stay = STAY_MINUTES.get(anchor["category"], STAY_MINUTES["테마파크"])
+        stay = spot_stay(anchor["category"])
         if anchor["id"] == origin.get("id"):
             travel = 0
             steps.pop()                                         # 출발지 = 테마파크
@@ -140,4 +147,5 @@ if __name__ == "__main__":
     assert s[2]["time"] == "14:10", s[2]["time"]     # 09:05 도착 + 300분 + 이동 5분
     s = build_course({**park, "name": "테마파크"}, places, "10:00", "대중교통", weekday="월", anchor=park)
     assert s[0]["category"] == "테마파크" and s[0]["warning"] is None
+    assert spot_stay("테마파크") == 300 and spot_stay("수목원,식물원") == 120
     print("ok")
