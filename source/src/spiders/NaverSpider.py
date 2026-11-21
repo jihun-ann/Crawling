@@ -16,15 +16,22 @@ from urllib.parse import urlparse, parse_qs
 
 from source.src.api.token import total_token
 from source.src.items import ContentItem
+from source.src.content_filter import content_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 class NaverSpider(Spider):
+    """네이버 블로그/카페 후기 크롤러.
+
+    흐름: 검색어(지역 + 키워드) → 네이버 검색 결과 → 글 페이지(iframe) → 본문 추출 → ContentItem
+    실행: scrapy crawl naver_crawling -a prov=서울특별시   (prov → self.prov)
+    """
     name = "naver_crawling"
-    platform = "naver"
+    platform = "naver"      # 저장 폴더명 (blog_content/naver)
 
     def start_requests(self):
+        """크롤링 시작점. 지역 목록 × 키워드 목록으로 검색 요청 생성 (현재는 단건 테스트용 고정 검색어)."""
         province = self.prov
         location_q = self.location_list(province)
         # location_q = self.location_name(province)
@@ -40,6 +47,7 @@ class NaverSpider(Spider):
         yield from self.searching_naver("서울특별시 강서구 방화동 맛집", 1, '맛집')
 
     def searching_naver(self, query, start, keyword):
+        """네이버 검색 결과 페이지 요청. start는 페이지 오프셋, keyword는 결과 item에 기록할 검색 키워드."""
         re_query = urllib.parse.quote(query)
         options = ["blog"]
 
@@ -52,6 +60,7 @@ class NaverSpider(Spider):
 
 
     def parse_init_html(self, response):
+        """검색 결과에서 글 링크 추출. 제목에 차단 키워드가 있거나 이미 저장된 글(content_id 기준)은 건너뜀."""
         soup = BeautifulSoup(response.text,"html.parser")
         cont = 0
 
@@ -74,12 +83,13 @@ class NaverSpider(Spider):
             if not span_text:
                 continue
 
+            # 제목 기준 1차 필터: 여행/맛집 후기와 무관한 글, 광고 표기 글 제외 (본문 기준 2차 필터는 pipelines)
             block_keywords = ("경매", "법원경매", "부동산", "광고", "협찬", "임장", "의원", "병원", "학비", "거주", "원룸", "투룸", "직거래", "시술", "공고", "매매")
             if any(keyword in span_text for keyword in block_keywords):
                 continue
             else:
                 href = a.get("href")
-                file_name = href.replace("https://","").replace("http://","").replace("/","_")
+                file_name = content_id(href)
 
                 if self.has_content(file_name):
                     continue
@@ -93,6 +103,7 @@ class NaverSpider(Spider):
 
 
     def has_content(self, url):
+        """이미 크롤링해서 JSON으로 저장된 글인지 확인 (url = content_id 파일명)."""
         result = False
         settings = get_project_settings()
         path = Path(settings.get("BASE_DIR"))/"source"/"src"/"blog_content"/f"{self.platform}"/f"{url}.json"
@@ -107,6 +118,7 @@ class NaverSpider(Spider):
 
 
     def parse_main_html(self, response):
+        """글 페이지는 본문이 iframe 안에 있음 → iframe 실제 주소를 찾아 다시 요청 (블로그: mainFrame, 카페: cafe_main)."""
         filename = response.meta["file_name"]
         init_url = response.url
         soup = BeautifulSoup(response.text,"html.parser")
@@ -137,6 +149,7 @@ class NaverSpider(Spider):
 
 
     def parse_main_container_export(self, response):
+        """iframe 본문 페이지에서 제목/본문 텍스트 추출 → ContentItem 생성 (스마트에디터, 카페, 구버전 에디터 순으로 시도)."""
         soup = BeautifulSoup(response.text,"html.parser")
         title = str
         content_text = str
@@ -160,6 +173,7 @@ class NaverSpider(Spider):
 
 
     def parsing_content_items(self, title, filename, init_url, content_url, content, keyword):
+        """추출한 값으로 ContentItem 생성. 이후 pipelines.SrcPipeline이 필터링 후 저장."""
         item = ContentItem()
         item['filename'] = filename
         item['init_url'] = init_url
@@ -173,6 +187,7 @@ class NaverSpider(Spider):
 
 
     def location_list(self, prov):
+        """SGIS API로 시/도(prov) 하위 전체 주소("서울특별시 강서구 방화동" 등) 목록 조회. 검색어의 지역 부분으로 사용."""
         q = deque()
         access_token = total_token.get_sgis_access_token()
 
@@ -216,6 +231,7 @@ class NaverSpider(Spider):
             return None
 
     def location_name(self, prov_value):
+        """location_list와 같은 결과를 API 없이 로컬 파일(properties/location_kr.json)로 생성."""
         q = deque()
         resource_path = resources.files("source.src.properties")
         # 지역명 JSON 추출
@@ -244,6 +260,7 @@ class NaverSpider(Spider):
 
 
     def keyword_list(self):
+        """검색 키워드 목록(properties/keyword.json, 방문목적별 키워드) 로드."""
         q = deque()
         resource_path = resources.files("source.src.properties")
 

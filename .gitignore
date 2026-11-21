@@ -1,3 +1,6 @@
 .idea
 .venv
 Crawling.iml
+__pycache__/
+.env
+dbs/

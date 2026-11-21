@@ -15,3 +15,5 @@ class ContentItem(scrapy.Item):
     context = scrapy.Field()                #글 내용
     crawled_at = scrapy.Field()             #크롤링 일자
     keyword = scrapy.Field()
+    content_hash = scrapy.Field()           #본문 해시 (동일 본문 중복 판별)
+    excluded_reason = scrapy.Field()        #제외 사유 (ad:*, ai:*, duplicate:*) / None이면 사용

@@ -1,117 +1,55 @@
-# Scrapy settings for src project
-#
-# For simplicity, this file contains only settings considered important or
-# commonly used. You can find more settings consulting the documentation:
-#
-#     https://docs.scrapy.org/en/latest/topics/settings.html
-#     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+# Scrapy 설정 + 프로젝트 공용 설정 (크롤러, API, 로더가 모두 get_project_settings()로 읽음)
+# 문서: https://docs.scrapy.org/en/latest/topics/settings.html
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# 레포 루트의 .env에서 DB 접속 정보 / API 키를 읽음 (.env는 git 제외, 양식은 .env.example)
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 BOT_NAME = "source"
-BASE_DIR = "C:\\workspace\\Crawling"
+BASE_DIR = str(Path(__file__).resolve().parents[2])  # 레포 루트. 크롤링 결과 저장 경로 기준
 
 SPIDER_MODULES = ["source.src.spiders"]
 NEWSPIDER_MODULE = "source.src.spiders"
 
-ADDONS = {}
-
-DB_URL = "localhost"
-DB_PORT = "5432"
-DB_USER = "postgres"
-DB_PASSWORD = "***REMOVED***"
-DB_SCHEMA = "postgres"
-
 LOG_LEVEL = "INFO"
 
-#SGIS
-SGIS_CLIENT_ID = "***REMOVED***"
-SGIS_CLIENT_KEY = "***REMOVED***"
-#Naver Cloud API Test
-NCLOUD_CLIENT_ID = "***REMOVED***"
-NCLOUD_CLIENT_KEY = "***REMOVED***"
-#Naver Developer Test1
-NAVER_CLIENT_ID = "***REMOVED***"
-NAVER_CLIENT_KEY = "***REMOVED***"
-#Naver Developer Test2
-# NAVER_CLIENT_ID = "***REMOVED***"
-# NAVER_CLIENT_KEY = "***REMOVED***"
+# PostgreSQL 접속 정보 (sqlalchemy/database.py)
+DB_URL = os.getenv("DB_URL")
+DB_PORT = os.getenv("DB_PORT")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_SCHEMA = os.getenv("DB_SCHEMA")
 
-# Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "src (+http://www.yourdomain.com)"
+# 통계청 SGIS: 시/구/동 목록 조회 → 크롤링 검색어 생성 (NaverSpider.location_list)
+SGIS_CLIENT_ID = os.getenv("SGIS_CLIENT_ID")
+SGIS_CLIENT_KEY = os.getenv("SGIS_CLIENT_KEY")
 
+# 네이버 개발자센터: 지역검색 API로 블로그 속 장소 확인 (blog_content_loader.retrive_place)
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_KEY = os.getenv("NAVER_CLIENT_KEY")
 
-# Obey robots.txt rules
+# 요청 설정
 ROBOTSTXT_OBEY = False
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-#Scrapy Spider Setting
-# Concurrency and throttling settings
+COOKIES_ENABLED = False
+
+# 동시 요청 수 / 요청 간격 (대상 사이트 부하 방지)
 CONCURRENT_REQUESTS = 32
 CONCURRENT_REQUESTS_PER_DOMAIN = 16
 DOWNLOAD_DELAY = 0.5
-#크롤링 대상 사이트에 피해를 주지 않기 위하여 요청 지연 시간 랜덤으로 적용되도록 하는 옵션
-RANDOMIZE_DOWNLOAD_DELAY = True
+RANDOMIZE_DOWNLOAD_DELAY = True     # 지연 시간을 0.5~1.5배로 랜덤 적용
 
-# Disable cookies (enabled by default)
-COOKIES_ENABLED = False
-
-
+# 너비 우선(BFS) 크롤링: 검색 결과 페이지를 먼저 다 돌고 본문으로 내려감
 DEPTH_PRIORITY = 1
 SCHEDULER_DISK_QUEUE = 'scrapy.squeues.PickleFifoDiskQueue'
 SCHEDULER_MEMORY_QUEUE = 'scrapy.squeues.FifoMemoryQueue'
 
-# Disable Telnet Console (enabled by default)
-#TELNETCONSOLE_ENABLED = False
-
-# Override the default request headers:
-#DEFAULT_REQUEST_HEADERS = {
-#    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-#    "Accept-Language": "en",
-#}
-
-# Enable or disable spider middlewares
-# See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-#SPIDER_MIDDLEWARES = {
-#    "src.middlewares.SrcSpiderMiddleware": 543,
-#}
-
-# Enable or disable downloader middlewares
-# See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#DOWNLOADER_MIDDLEWARES = {
-#    "src.middlewares.SrcDownloaderMiddleware": 543,
-#}
-
-# Enable or disable extensions
-# See https://docs.scrapy.org/en/latest/topics/extensions.html
-#EXTENSIONS = {
-#    "scrapy.extensions.telnet.TelnetConsole": None,
-#}
-
-# Configure item pipelines
-# See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
+# 크롤링 결과 처리: 중복/광고/AI글 판별 후 blog_content/{platform}/*.json 저장
 ITEM_PIPELINES = {
    "source.src.pipelines.SrcPipeline": 300,
 }
 
-# Enable and configure the AutoThrottle extension (disabled by default)
-# See https://docs.scrapy.org/en/latest/topics/autothrottle.html
-#AUTOTHROTTLE_ENABLED = True
-# The initial download delay
-#AUTOTHROTTLE_START_DELAY = 5
-# The maximum download delay to be set in case of high latencies
-#AUTOTHROTTLE_MAX_DELAY = 60
-# The average number of requests Scrapy should be sending in parallel to
-# each remote server
-#AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
-# Enable showing throttling stats for every response received:
-#AUTOTHROTTLE_DEBUG = False
-
-# Enable and configure HTTP caching (disabled by default)
-# See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
-#HTTPCACHE_ENABLED = True
-#HTTPCACHE_EXPIRATION_SECS = 0
-#HTTPCACHE_DIR = "httpcache"
-#HTTPCACHE_IGNORE_HTTP_CODES = []
-#HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
-
-# Set settings whose default value is deprecated to a future-proof value
 FEED_EXPORT_ENCODING = "utf-8"

@@ -2,6 +2,7 @@ from source.src.sqlalchemy.database import Base
 from sqlalchemy import Column, Integer, String
 
 class Place(Base):
+    """추천 대상 장소 (카페, 맛집, 관광지 등). 블로그 크롤링 결과로 채워짐."""
     __tablename__ = "place"
     # 장소 정보
     place_id = Column(Integer, primary_key=True)
