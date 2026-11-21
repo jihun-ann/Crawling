@@ -7,3 +7,4 @@ uvicorn==0.40.0
 SQLAlchemy==2.0.46
 psycopg2-binary==2.9.11
 python-dotenv==1.2.4
+anthropic==2.12.0

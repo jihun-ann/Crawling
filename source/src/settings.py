@@ -31,6 +31,15 @@ SGIS_CLIENT_KEY = os.getenv("SGIS_CLIENT_KEY")
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_KEY = os.getenv("NAVER_CLIENT_KEY")
 
+# 카카오: 다음 블로그(Tistory 등) 검색 (spiders/DaumBlogSpider)
+KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY")
+
+# 유튜브 Data API v3 (spiders/YoutubeSpider)
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+
+# 광고/AI글 Claude 2차 판정 (llm_check.py). 1이면 켜짐 → API 비용 발생. 키는 ANTHROPIC_API_KEY
+AI_CHECK_WITH_LLM = os.getenv("AI_CHECK_WITH_LLM") == "1"
+
 # 요청 설정
 ROBOTSTXT_OBEY = False
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'

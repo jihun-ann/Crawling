@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scrapy.utils.project import get_project_settings
 from source.src.items import ContentItem
-from source.src.content_filter import content_hash, exclude_reason
+from source.src.content_filter import content_hash, exclude_reason, is_borderline
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,11 +34,26 @@ class SrcPipeline:
             else:
                 self.seen_hashes[h] = item["filename"]
                 item["excluded_reason"] = exclude_reason(item["title"], item["context"])
+                if (not item["excluded_reason"] and spider.settings.getbool("AI_CHECK_WITH_LLM")
+                        and is_borderline(item["title"], item["context"])):
+                    item["excluded_reason"] = self.llm_reason(item)
             if item["excluded_reason"]:
                 logger.info(f"Excluded|{item['excluded_reason']}|{item['filename']}")
             self.save_blog_content(item)
 
         return item
+
+    def llm_reason(self, item):
+        """Claude 2차 판정 → 'llm:ad:근거' / 'llm:ai:근거' / None. 판정 실패하면 통과로 둠."""
+        from source.src.llm_check import llm_verdict
+        v = llm_verdict(item["title"], item["context"])
+        if not v:
+            return None
+        if v["sponsored"]:
+            return f"llm:ad:{v['reason']}"
+        if v["ai_written"]:
+            return f"llm:ai:{v['reason']}"
+        return None
 
     def save_blog_content(self, item):
         """blog_content/{platform}/{filename}.json 으로 저장. 같은 파일명이면 덮어씀."""

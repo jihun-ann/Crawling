@@ -17,6 +17,10 @@ def content_id(url):
         log_no = q.get("logNo") or (parts[1] if len(parts) > 1 else None)
         if blog_id and log_no:
             return f"blog.naver.com_{blog_id}_{log_no}"
+    if host in ("youtube.com", "www.youtube.com", "youtu.be"):
+        video = q.get("v") or (parts[-1] if parts else None)
+        if video:
+            return f"youtube.com_{video}"
     if host == "cafe.naver.com":
         if q.get("clubid") and q.get("articleid"):
             return f"cafe.naver.com_{q['clubid']}_{q['articleid']}"
@@ -113,12 +117,21 @@ def exclude_reason(title, text):
     if AD_REPOST.search(body):
         return "ad:repost"
 
-    # ponytail: 룰 기반이라 노골적인 AI글만 걸림. 정밀도 필요하면 애매한 글만 LLM 분류기로 2차 판정
-    ai_hits = sum(p in body for p in AI_PHRASES) + (2 if AI_MARKDOWN.search(body) else 0)
-    human_hits = len(HUMAN_TRACE.findall(body))
+    # 룰 기반이라 노골적인 AI글만 걸림 → 애매한 글(is_borderline)은 llm_check로 2차 판정
+    ai_hits, human_hits = _ai_signals(body)
     if ai_hits >= AI_MIN_HITS and human_hits == 0:
         return f"ai:{ai_hits}"
     return None
+
+
+def _ai_signals(body):
+    return (sum(p in body for p in AI_PHRASES) + (2 if AI_MARKDOWN.search(body) else 0),
+            len(HUMAN_TRACE.findall(body)))
+
+
+def is_borderline(title, text):
+    """룰은 통과했지만 AI 템플릿 문구가 하나라도 있는 글 → LLM 2차 판정 대상."""
+    return _ai_signals(f"{title or ''}\n{text or ''}")[0] >= 1
 
 
 if __name__ == "__main__":
@@ -129,6 +142,8 @@ if __name__ == "__main__":
     )}
     assert ids == {"blog.naver.com_abc_223978309252"}, ids
     assert content_id("https://cafe.naver.com/joonggonara/123?art=x") == "cafe.naver.com_joonggonara_123"
+    assert content_id("https://www.youtube.com/watch?v=abc123") == content_id("https://youtu.be/abc123") == "youtube.com_abc123"
+    assert content_id("https://foo.tistory.com/123") == "foo.tistory.com_123"
     assert content_hash("a b\nc") == content_hash("abc")
     d0 = datetime.date(2026, 11, 22)
     assert parse_post_date("2025. 8. 20. 14:31", d0) == "2025-08-20"
