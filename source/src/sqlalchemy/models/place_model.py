@@ -49,7 +49,7 @@ class PlaceReview(Base):
     """장소 ↔ 후기 글 연결. 한 글이 여러 장소를, 한 장소가 여러 글을 가질 수 있음."""
     __tablename__ = "place_review"
     place_id = Column(Integer, ForeignKey("place.place_id", ondelete="CASCADE"), primary_key=True)
-    content_id = Column(String, primary_key=True)  #글 ID (blog_content JSON 파일명)
+    content_id = Column(String, primary_key=True)  #글 ID (raw_post.content_id)
     platform = Column(String)
     url = Column(String)
     title = Column(String)

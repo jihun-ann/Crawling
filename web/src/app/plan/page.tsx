@@ -62,6 +62,7 @@ async function PlanForm({ searchParams }: { searchParams: PageProps<"/plan">["se
         <input type="hidden" name="mode" value={m.id} />
         {m.id === "region" && (
           <>
+            <Field label="출발지 (선택)" name="from" placeholder="예: 집 주소, 서울역 — 넣으면 가는 길의 식사·카페까지 짜드려요" />
             <Field label="지역" name="region" placeholder="예: 강원도 강릉 (가볼만한 곳만 골랐다면 비워도 돼요)" />
             <SpotTypeSelect />
             <Field label="숙소 (선택)" name="stay" placeholder="숙소 이름 또는 주소" />

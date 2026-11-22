@@ -5,6 +5,7 @@ import { getCourse, type Place } from "@/lib/course";
 import CourseMap from "./course-map";
 
 const naverMapUrl = (p: Place) => `https://map.naver.com/p/search/${encodeURIComponent(`${p.name} ${p.address}`)}`;
+const duration = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}시간${min % 60 ? ` ${min % 60}분` : ""}` : `${min}분`);
 
 function PlaceName({ place }: { place: Place }) {
   return place.id > 0
@@ -30,7 +31,7 @@ async function CourseView({ searchParams }: { searchParams: PageProps<"/course">
           <li key={`${i}-${s.place.id}`} className="relative mb-8 pl-6">
             <span className="absolute -left-[7px] top-1.5 h-3 w-3 rounded-full bg-zinc-900 dark:bg-zinc-100" />
             <div className="text-sm text-zinc-500">
-              {s.time} · {s.category}{s.travel_min > 0 && ` · 이동 약 ${s.travel_min}분`}
+              {s.time} · {s.category}{s.travel_min > 0 && ` · 이동 약 ${duration(s.travel_min)}`}
             </div>
             <div className="mt-1 text-lg font-semibold"><PlaceName place={s.place} /></div>
             {s.hours_today && <div className="text-sm text-zinc-600 dark:text-zinc-400">영업 {s.hours_today}</div>}
@@ -42,12 +43,17 @@ async function CourseView({ searchParams }: { searchParams: PageProps<"/course">
               </a>
             )}
             {s.alternatives.length > 0 && (
-              <details className="mt-2 text-sm">
-                <summary className="cursor-pointer text-zinc-500">다른 {s.category} {s.alternatives.length}곳</summary>
-                <ul className="mt-2 grid gap-1">
-                  {s.alternatives.map((a) => <li key={a.id}><PlaceName place={a} /></li>)}
+              <div className="mt-3 text-sm">
+                <div className="text-zinc-500">다른 {s.category} {s.alternatives.length}곳</div>
+                <ul className="mt-1 divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                  {s.alternatives.map((a) => (
+                    <li key={a.id} className="px-3 py-2">
+                      <div className="font-medium"><PlaceName place={a} /></div>
+                      {a.address && <div className="text-xs text-zinc-500">{a.address}</div>}
+                    </li>
+                  ))}
                 </ul>
-              </details>
+              </div>
             )}
           </li>
         ))}

@@ -6,12 +6,12 @@ import datetime
 import json
 import logging
 import urllib.parse
-from pathlib import Path
 
 import scrapy
 
 from source.src.content_filter import parse_post_date
 from source.src.items import ContentItem
+from source.src.sqlalchemy.crud import raw_post_crud
 
 logger = logging.getLogger(__name__)
 API = "https://www.googleapis.com/youtube/v3"
@@ -19,7 +19,7 @@ API = "https://www.googleapis.com/youtube/v3"
 
 class YoutubeSpider(scrapy.Spider):
     name = "youtube_crawling"
-    platform = "youtube"        # 저장 폴더명 (blog_content/youtube)
+    platform = "youtube"        # raw_post.platform 값
     max_results = 25            # 검색 1회당 영상 수 (최대 50)
     comments = 20               # 영상당 댓글 수
 
@@ -35,9 +35,9 @@ class YoutubeSpider(scrapy.Spider):
 
     def parse_search(self, response):
         """검색 결과 → 아직 저장 안 한 영상만 상세 정보(videos) 요청."""
-        base = Path(self.settings.get("BASE_DIR")) / "source" / "src" / "blog_content" / self.platform
-        ids = [it["id"]["videoId"] for it in json.loads(response.text).get("items", [])
-               if not (base / f"youtube.com_{it['id']['videoId']}.json").exists()]
+        found = [it["id"]["videoId"] for it in json.loads(response.text).get("items", [])]
+        known = raw_post_crud.known_ids(f"youtube.com_{v}" for v in found)
+        ids = [v for v in found if f"youtube.com_{v}" not in known]
         if ids:
             params = {"part": "snippet", "id": ",".join(ids), "key": self.key}
             yield scrapy.Request(f"{API}/videos?{urllib.parse.urlencode(params)}", self.parse_videos, meta=response.meta)

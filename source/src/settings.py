@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 BOT_NAME = "source"
-BASE_DIR = str(Path(__file__).resolve().parents[2])  # 레포 루트. 크롤링 결과 저장 경로 기준
+BASE_DIR = str(Path(__file__).resolve().parents[2])  # 레포 루트
 
 SPIDER_MODULES = ["source.src.spiders"]
 NEWSPIDER_MODULE = "source.src.spiders"
@@ -56,7 +56,7 @@ DEPTH_PRIORITY = 1
 SCHEDULER_DISK_QUEUE = 'scrapy.squeues.PickleFifoDiskQueue'
 SCHEDULER_MEMORY_QUEUE = 'scrapy.squeues.FifoMemoryQueue'
 
-# 크롤링 결과 처리: 중복/광고/AI글 판별 후 blog_content/{platform}/*.json 저장
+# 크롤링 결과 처리: 중복/광고/AI글 판별 후 DB raw_post 테이블에 저장
 ITEM_PIPELINES = {
    "source.src.pipelines.SrcPipeline": 300,
 }

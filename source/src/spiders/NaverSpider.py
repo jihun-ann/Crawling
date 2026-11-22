@@ -1,9 +1,8 @@
 import re
-import urllib
+import urllib.parse
 import json
 import logging
 import datetime
-from pathlib import Path
 
 import requests
 import scrapy
@@ -11,12 +10,11 @@ from scrapy import Spider
 from importlib import resources
 from collections import deque
 from bs4 import BeautifulSoup
-from scrapy.utils.project import get_project_settings
-from urllib.parse import urlparse, parse_qs
 
 from source.src.api.token import total_token
 from source.src.items import ContentItem
 from source.src.content_filter import content_id, parse_post_date
+from source.src.sqlalchemy.crud import raw_post_crud
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -28,7 +26,7 @@ class NaverSpider(Spider):
     실행: scrapy crawl naver_crawling -a prov=서울특별시   (prov → self.prov)
     """
     name = "naver_crawling"
-    platform = "naver"      # 저장 폴더명 (blog_content/naver)
+    platform = "naver"      # raw_post.platform 값
 
     def start_requests(self):
         """크롤링 시작점. 지역 목록 × 키워드 목록으로 검색 요청 생성 (현재는 단건 테스트용 고정 검색어).
@@ -44,81 +42,39 @@ class NaverSpider(Spider):
         keyword_q.append("맛집") #단건 테스트
         #keyword_q = self.keyword_list() #리스트 조회
 
+        # keyword 자리에 검색어 전체를 넘김 → 로더가 주소 없는 글의 지역 힌트로 사용
         # for location in location_q:
         #     for keyword in keyword_q:
         #         search_query = " ".join([location,keyword])
-        #         yield from self.searching_naver(search_query, 1, keyword)
-        yield from self.searching_naver("서울특별시 강서구 방화동 맛집", 1, '맛집')
+        #         yield from self.searching_naver(search_query, 1, search_query)
+        yield from self.searching_naver("서울특별시 강서구 방화동 맛집", 1, "서울특별시 강서구 방화동 맛집")
 
     def searching_naver(self, query, start, keyword):
-        """네이버 검색 결과 페이지 요청. start는 페이지 오프셋, keyword는 결과 item에 기록할 검색 키워드."""
-        re_query = urllib.parse.quote(query)
-        options = ["blog"]
-
-        for opt in options:
-            url = f"https://search.naver.com/search.naver?ssc=tab.{opt}.all&query={re_query}&start={start}"
-            #url = "https://search.naver.com/search.naver?query=" + re_query                       #전체 통합 검색
-            #url = "https://search.naver.com/search.naver?ssc=tab.blog.all&query=" + re_query      #블로그 검색
-            #url = "https://search.naver.com/search.naver?ssc=tab.cafe.all&query=" + re_query      #카페 검색
-            yield scrapy.Request(url, self.parse_init_html, meta={"query":re_query,"start":start, "keyword":keyword})
+        """네이버 블로그 검색 API 요청 (하루 25,000회 무료, 지역검색과 같은 NAVER_CLIENT_ID/KEY). start는 1부터의 순번."""
+        # ponytail: 블로그만, 1페이지(100건)만. 카페는 본문이 로그인/SPA라 별도 처리 필요, 더 필요하면 start=101,201...
+        params = urllib.parse.urlencode({"query": query, "display": 100, "start": start, "sort": "sim"})
+        headers = {"X-Naver-Client-Id": self.settings.get("NAVER_CLIENT_ID"),
+                   "X-Naver-Client-Secret": self.settings.get("NAVER_CLIENT_KEY")}
+        yield scrapy.Request(f"https://openapi.naver.com/v1/search/blog.json?{params}", self.parse_search,
+                             headers=headers, meta={"keyword": keyword})
 
 
-    def parse_init_html(self, response):
-        """검색 결과에서 글 링크 추출. 제목에 차단 키워드가 있거나 이미 저장된 글(content_id 기준)은 건너뜀."""
-        soup = BeautifulSoup(response.text,"html.parser")
-        cont = 0
+    def parse_search(self, response):
+        """검색 결과(JSON) → 글 링크. 제목에 차단 키워드가 있거나 이미 저장된 글(raw_post)은 건너뜀."""
+        # 제목 기준 1차 필터: 여행/맛집 후기와 무관한 글, 광고 표기 글 제외 (본문 기준 2차 필터는 pipelines)
+        block_keywords = ("경매", "법원경매", "부동산", "광고", "협찬", "임장", "의원", "병원", "학비", "거주", "원룸", "투룸", "직거래", "시술", "공고", "매매")
+        posts = {}
+        for it in json.loads(response.text).get("items", []):
+            title = BeautifulSoup(it["title"], "html.parser").get_text()
+            if not any(k in title for k in block_keywords):
+                posts[content_id(it["link"])] = it["link"]
 
-        for a in soup.select("a"):
-            init_url = None
-            span_text = None
-
-            #블로그 Link
-            span = a.select_one("span.sds-comps-text-type-headline1")
-            if  span:
-                span_text = span.get_text()
-                cont += 1
-
-
-            #카페 Link
-            elif "title_link" in a.get("class", []):
-                span_text = a.get_text()
-                cont += 1
-
-            if not span_text:
-                continue
-
-            # 제목 기준 1차 필터: 여행/맛집 후기와 무관한 글, 광고 표기 글 제외 (본문 기준 2차 필터는 pipelines)
-            block_keywords = ("경매", "법원경매", "부동산", "광고", "협찬", "임장", "의원", "병원", "학비", "거주", "원룸", "투룸", "직거래", "시술", "공고", "매매")
-            if any(keyword in span_text for keyword in block_keywords):
-                continue
-            else:
-                href = a.get("href")
-                file_name = content_id(href)
-
-                if self.has_content(file_name):
-                    continue
-                yield scrapy.Request(href, self.parse_main_html,meta={"file_name":file_name,"keyword":response.meta["keyword"]}, dont_filter=True)
-
-        if cont == 0:
-            return
-
-        # yield from self.searching_naver(urllib.parse.unquote(response.meta["query"]),
-        #                                 response.meta["start"]+30)
-
-
-    def has_content(self, url):
-        """이미 크롤링해서 JSON으로 저장된 글인지 확인 (url = content_id 파일명)."""
-        result = False
-        settings = get_project_settings()
-        path = Path(settings.get("BASE_DIR"))/"source"/"src"/"blog_content"/f"{self.platform}"/f"{url}.json"
-        if not path.exists() :
-            result = False
-            logger.info(f"Cralwing : {url}")
-        else :
-            result = True
-            logger.info(f"Already Cralwed : {url}")
-
-        return result
+        known = raw_post_crud.known_ids(posts)
+        logger.info(f"검색 결과 {len(posts)}건 중 새 글 {len(posts) - len(known)}건")
+        for cid, link in posts.items():
+            if cid not in known:
+                yield scrapy.Request(link, self.parse_main_html, meta={"file_name": cid, "keyword": response.meta["keyword"]},
+                                     dont_filter=True)
 
 
     def parse_main_html(self, response):
