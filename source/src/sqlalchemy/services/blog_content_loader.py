@@ -31,6 +31,10 @@ MOBILE_UA = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS 
 AREA_LIKE_NAME = re.compile(r'^[가-힣]{1,4}(?:동|구|시|군|읍|면|리)$')
 
 
+class NaverBlocked(Exception):
+    """네이버 검색이 자동 요청을 차단함 (403/429)."""
+
+
 def _nospace(s):
     return s.replace(" ", "")
 
@@ -59,6 +63,10 @@ class BlogContentLoader:
             try:
                 saved += self.load_post(post)
                 raw_post_crud.mark_processed(post["content_id"])
+            except NaverBlocked as e:
+                self.db.rollback()
+                logger.error(f"BlogContentLoader|네이버 차단({e})|남은 글은 다음 실행 때 처리|{post['content_id']}")
+                break
             except Exception as e:
                 self.db.rollback()
                 logger.exception(f"BlogContentLoader|load_post Error|{post['content_id']}|{e}")
@@ -208,9 +216,13 @@ class BlogContentLoader:
     def find_place_name(self, address):
         """주소로 네이버 통합검색 → 해당 주소에 있는 장소(상호명) 후보 목록 반환. 없으면 None."""
         # ponytail: 네이버 검색 화면 HTML 클래스(._5Dken)에 의존. 화면 개편되면 깨짐 → 후보가 계속 0이면 여기부터 확인
+        # ponytail: 연속 호출하면 403 차단(2026-11 배치에서 약 1,000회 후). 1초 간격 + 차단되면 멈추고 다음 실행 때 이어서
+        time.sleep(1)
         encoding_address = urllib.parse.quote(address)
         url = f"https://search.naver.com/search.naver?ssc=tab.nx.all&query={encoding_address}"
         search_response = requests.get(url, timeout=10)
+        if search_response.status_code in (403, 429):
+            raise NaverBlocked(search_response.status_code)
 
         if search_response.status_code == 200 :
             soup = BeautifulSoup(search_response.text,"html.parser")
